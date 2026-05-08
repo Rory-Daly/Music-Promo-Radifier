@@ -1,0 +1,7 @@
+[
+  {
+    "name": "Total static JS chunks (brotli)",
+    "path": ".next/static/chunks/*.js",
+    "limit": "350 kB"
+  }
+]

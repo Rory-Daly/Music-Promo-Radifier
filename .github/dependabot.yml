@@ -1,0 +1,14 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      # Group minor/patch updates to reduce PR noise
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"

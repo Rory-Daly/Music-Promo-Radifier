@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  quality:
+    name: Type check, lint, test, build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        # Using `npm install` rather than `npm ci` because cross-platform
+        # lockfile generation on macOS (arm64) reliably misses some Linux
+        # transitive optional deps (e.g. @rolldown/binding-wasm32-wasi's
+        # nested @emnapi/* entries). Revisit if switching to pnpm.
+        run: npm install --prefer-offline --no-audit --no-fund
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Lint
+        run: npx eslint src
+
+      - name: Test with coverage
+        run: npm run test:coverage
+
+      - name: Build
+        run: npm run build
+        env:
+          NODE_OPTIONS: '--max-old-space-size=4096'
+          # Add any build-time env vars here (use GitHub Secrets for real values)
+          NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL || 'http://localhost:3000' }}
+
+      - name: Bundle size check
+        run: npm run size
+
+      - name: Security audit
+        run: npm audit --audit-level=high
+        continue-on-error: true  # Don't block CI, but surface the output
