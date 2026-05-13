@@ -1,125 +1,264 @@
-# Project Specification — [APP_NAME]
+# Project Specification — Music Promo Radifier (working name)
 
-> Fill this in before writing any code. Claude reads this at session start.
-> Generate a draft using Gemini 2.5 Pro with the prompt in CLAUDE.md.
+> Source of truth for v1 scope, data model, and architecture. Update this file before adding/changing user-facing functionality.
 
 ## Overview
 
 **Problem being solved:**
-[What pain does this solve? For whom?]
+Independent musicians who release regularly (every 4-6 weeks) lose hours per release on the same three bottlenecks: creating content, editing video, and posting to every platform manually. The work is largely repetitive, but generic schedulers (Buffer, Later) don't help with the creative production, and video editors (CapCut) don't help with cross-posting or campaigns.
 
 **Core value proposition:**
-[One sentence: what does this app do better than the alternative?]
+Track in → ten posts out, scheduled and published. The tool finds the most reel-worthy moments in a track, auto-cuts them against the artist's own footage (drone, behind-the-scenes, performance), renders platform-specific variants in a consistent brand, and publishes everywhere in one approval step.
 
 **Target users:**
-[Who uses this? What are their goals?]
+
+- **Primary (v1):** illutible (Rory Daly) — Brisbane-based instrumental electronic producer, ~10 releases/year, 206-track back catalogue, drone footage as primary visual asset, targeting both listeners and sync (soundtrack/game) licensing.
+- **Secondary (v2+):** Other independent instrumental/electronic/cinematic artists with similar workflows. Multi-artist from day 1 in the data model so this transition is cheap.
+
+**Positioning angle:** "100% human-made." The tool automates *workflow* (transcription, beat detection, scheduling, cross-posting). It does **not** fabricate creative output. Visuals come from the artist's own footage; music comes from the artist's tracks. AI is a workflow accelerator, not a content generator. This is a deliberate positioning choice in an AI-saturated content landscape.
 
 ---
 
 ## Feature List (v1 only)
 
-List only what will be built in v1. Be explicit about what is OUT of scope.
-
 ### In scope
 
-- [ ] Feature 1
-- [ ] Feature 2
+- [ ] **Multi-artist workspaces** — auth scoped to artists; one user can manage many artists; every asset belongs to an artist.
+- [ ] **Asset vault** — upload/import tracks (audio + artwork), import drone clips from Google Drive, tag clips by mood/location/time-of-day.
+- [ ] **Brand kit per artist** — fonts, colours, logo, smart-link template, default hashtag/caption presets. Pre-seeded with the illutible aesthetic for the primary artist.
+- [ ] **Hook detector** — given a track, surface the 3-5 most reel-worthy 15-30s sections using Spotify Audio Analysis (sections, bars, beats, energy) for tracks released to Spotify. Fallback to local audio analysis (FFmpeg + simple energy/segmentation) for unreleased tracks.
+- [ ] **Auto-cut composer (Remotion)** — given a chosen hook and a set of drone clips, render reel variants for IG Reel (9:16), IG Story (9:16), IG feed (1:1), TikTok (9:16), YouTube Short (9:16), and X/Threads (16:9 or 1:1). Cuts on beat. Overlays artwork, title card, smart-link CTA. Reusable templates so output stays brand-consistent across releases.
+- [ ] **Caption generator** — drafts platform-specific captions (TikTok punchy, IG vibe, YT SEO-friendly) using track metadata and brand kit voice. User edits + approves.
+- [ ] **Multi-platform publisher** — schedule or post to IG (Reels/Story/Feed), TikTok, YouTube Shorts, X, Threads, Facebook via Ayrshare. One approval, fans out. Per-artist account connections.
+- [ ] **Release campaign templates** — given a release date, autogenerate a calendar of 8-12 post slots across a 4-week window (tease, countdown, drop day, behind-scenes, alt cuts, follow-ups). User batch-approves drafts.
+- [ ] **Smart link generator** — single URL → all DSPs (linkfire-style). Per-track. Auto-included in captions/CTAs.
 
 ### Out of scope (v2+)
 
-- Feature X
-- Feature Y
+- Performance analytics loop (metrics back to "which hooks/cuts/captions converted").
+- Trending audio/format radar.
+- Sync licensing pitch tooling (B2B outbound to filmmakers/game devs).
+- Fan DM automation, comment management.
+- Spotify Canvas generation.
+- Talking-head/lyric video features (not applicable to instrumental catalogue).
+- Public landing/marketing site for the tool itself.
+- Stripe billing and tiered plans (only relevant if/when opening to other artists).
 
 ---
 
 ## User Roles & Permissions
 
-| Role   | Can do | Cannot do |
-| ------ | ------ | --------- |
-| [role] | ...    | ...       |
+| Role | Can do | Cannot do |
+|---|---|---|
+| **Owner** (artist account holder, v1 = Rory) | Everything: manage artists, vault, brand, publish, schedule, connect socials, invite collaborators (v2). | — |
+| **Collaborator** (v2+, e.g. manager) | View vault, draft posts, schedule. Cannot disconnect socials or delete artist. | Billing, artist deletion, social account removal. |
+
+v1 ships with Owner only. Schema supports Collaborator from day 1 so v2 is additive.
 
 ---
 
 ## Data Models
 
-### [ModelName]
+All tables include `id uuid primary key`, `created_at timestamptz default now()`, `updated_at timestamptz`. Supabase RLS enforces artist-scoped access.
 
-| Field      | Type      | Notes       |
-| ---------- | --------- | ----------- |
-| id         | uuid      | primary key |
-| created_at | timestamp | auto        |
+### `users`
+| Field | Type | Notes |
+|---|---|---|
+| id | uuid | from auth.users |
+| email | text | |
+| name | text | |
+
+### `artists` (the central tenancy boundary)
+| Field | Type | Notes |
+|---|---|---|
+| name | text | display name |
+| slug | text | URL-safe |
+| bio | text | |
+| contact_email | text | |
+| brand_kit | jsonb | fonts, colours, logo asset id, smart-link template, caption presets |
+
+### `artist_memberships` (user ↔ artist join)
+| Field | Type | Notes |
+|---|---|---|
+| user_id | uuid → users | |
+| artist_id | uuid → artists | |
+| role | enum | `owner` \| `collaborator` |
+
+### `tracks`
+| Field | Type | Notes |
+|---|---|---|
+| artist_id | uuid → artists | |
+| title | text | |
+| audio_url | text | storage path |
+| artwork_url | text | storage path |
+| release_date | date | nullable for unreleased |
+| spotify_id | text | nullable; used for Audio Analysis API |
+| isrc | text | nullable |
+| smart_link_url | text | generated |
+| duration_seconds | int | |
+| analysis | jsonb | cached audio analysis (beats, sections, hooks) |
+
+### `clips` (drone footage and other visual assets)
+| Field | Type | Notes |
+|---|---|---|
+| artist_id | uuid → artists | |
+| source | enum | `gdrive` \| `upload` |
+| gdrive_file_id | text | nullable |
+| storage_url | text | local copy in Supabase Storage if synced |
+| duration_seconds | float | |
+| width / height | int | |
+| tags | text[] | mood, location, time-of-day, weather |
+| thumbnail_url | text | |
+
+### `hooks` (detected reel-worthy sections per track)
+| Field | Type | Notes |
+|---|---|---|
+| track_id | uuid → tracks | |
+| start_seconds | float | |
+| end_seconds | float | |
+| score | float | confidence/energy score |
+| label | text | e.g. "drop", "build", "main hook" |
+
+### `renders` (a rendered video output)
+| Field | Type | Notes |
+|---|---|---|
+| artist_id | uuid → artists | |
+| track_id | uuid → tracks | |
+| hook_id | uuid → hooks | |
+| template_id | text | which Remotion composition |
+| aspect_ratio | enum | `9x16` \| `1x1` \| `16x9` |
+| platform | enum | `ig_reel` \| `ig_story` \| `ig_feed` \| `tiktok` \| `yt_short` \| `x` \| `threads` \| `fb` |
+| clip_ids | uuid[] | which clips were used |
+| output_url | text | storage path |
+| status | enum | `queued` \| `rendering` \| `ready` \| `failed` |
+
+### `posts`
+| Field | Type | Notes |
+|---|---|---|
+| artist_id | uuid → artists | |
+| render_id | uuid → renders | |
+| platform | enum | as above |
+| caption | text | |
+| hashtags | text[] | |
+| scheduled_for | timestamptz | nullable = post now |
+| status | enum | `draft` \| `scheduled` \| `published` \| `failed` |
+| ayrshare_post_id | text | external id |
+| permalink | text | URL of published post |
+| error | text | nullable |
+
+### `campaigns` (release campaign)
+| Field | Type | Notes |
+|---|---|---|
+| artist_id | uuid → artists | |
+| track_id | uuid → tracks | |
+| release_date | date | |
+| template | text | which campaign template (e.g. `4_week_single`) |
+
+### `social_connections`
+| Field | Type | Notes |
+|---|---|---|
+| artist_id | uuid → artists | |
+| platform | enum | as above |
+| ayrshare_profile_key | text | encrypted |
+| display_handle | text | |
+
+### `integrations`
+| Field | Type | Notes |
+|---|---|---|
+| user_id | uuid → users | |
+| provider | enum | `google_drive` \| `spotify` |
+| refresh_token | text | encrypted |
+| scopes | text[] | |
 
 ---
 
 ## Pages & User Flows
 
-### [Page name] — `/route`
+### Dashboard — `/`
+**Who sees it:** Owner.
+**Purpose:** Quick view of current artist, upcoming scheduled posts, recent renders, current/next campaign.
 
-**Who sees it:** [role]
-**Purpose:** [one line]
-**Key interactions:**
+### Artist switcher — top nav
+**Purpose:** Switch active artist context; "Create new artist" CTA.
 
-- User does X → Y happens
-- User does A → B happens
+### Vault — `/vault`
+- **Tracks tab:** list + upload; for each, show artwork, status (analysed/not), hooks detected.
+- **Clips tab:** grid of drone clips with thumbnails, filters by tag. "Import from Google Drive" button → OAuth flow → folder picker → background sync.
+- **Brand tab:** edit brand kit (fonts, colours, logo, smart-link template, voice/tone preset).
 
----
+### Track detail — `/tracks/[id]`
+**Purpose:** Pick a hook, pick clips, render variants.
+Key interactions:
+- Waveform with detected hook markers; user selects one (or trims).
+- "Suggest clips" → tool proposes clips matching the track's mood/energy; user can add/remove.
+- "Render variants" → kicks off renders for selected platforms; user previews each before publishing.
 
-## Data Flows (if applicable)
+### Compose — `/compose`
+**Purpose:** Skip the per-track flow and build a single post manually (e.g. behind-the-scenes content not tied to a release).
 
-> Skip this section for apps with no external data ingestion or ETL work.
+### Campaigns — `/campaigns`
+- List campaigns by artist.
+- New campaign → pick track + release date + template → tool drafts 8-12 posts → user batch-approves.
 
-### Sources
+### Calendar — `/calendar`
+**Purpose:** See all scheduled and published posts across platforms. Drag-reschedule.
 
-| Source          | Format | Frequency | Owner  |
-| --------------- | ------ | --------- | ------ |
-| [e.g. Xero API] | JSON   | Daily     | [team] |
-
-### Transformation layers
-
-| Layer       | Location                                | Description                   |
-| ----------- | --------------------------------------- | ----------------------------- |
-| Raw         | [e.g. BigQuery `raw` dataset]           | Immutable copy of source data |
-| Transformed | [e.g. BigQuery `transformed` dataset]   | Cleaned, normalised, joined   |
-| Serving     | [e.g. BigQuery `serving` dataset / API] | Aggregated, app-ready         |
-
-### Data quality gates
-
-List the assertions that must pass before data is promoted to the serving layer:
-
-- [ ] [e.g. Row count non-zero]
-- [ ] [e.g. Required fields non-null]
-- [ ] [e.g. Totals reconcile with source]
+### Settings — `/settings`
+- Connected socials (per artist) via Ayrshare.
+- Connected integrations (Google Drive, Spotify) per user.
+- Team members (v2).
 
 ---
 
-## API Endpoints (if applicable)
+## API Endpoints
 
-| Method | Route      | Auth     | Description |
-| ------ | ---------- | -------- | ----------- |
-| GET    | `/api/...` | required | ...         |
-| POST   | `/api/...` | required | ...         |
+| Method | Route | Auth | Description |
+|---|---|---|---|
+| POST | `/api/tracks` | required | Create track (metadata + audio upload). |
+| POST | `/api/tracks/[id]/analyse` | required | Trigger hook detection (Spotify or local). |
+| POST | `/api/clips/import/gdrive` | required | Pull selected Drive files into vault. |
+| POST | `/api/renders` | required | Queue a render job (track + hook + clips + template + platform). |
+| GET | `/api/renders/[id]` | required | Poll render status. |
+| POST | `/api/posts` | required | Create draft post tied to a render. |
+| POST | `/api/posts/[id]/publish` | required | Send to Ayrshare (immediate or scheduled). |
+| POST | `/api/posts/[id]/schedule` | required | Update scheduled time. |
+| POST | `/api/campaigns` | required | Create campaign + draft posts. |
+| POST | `/api/integrations/google/callback` | required | OAuth callback. |
+| POST | `/api/integrations/spotify/callback` | required | OAuth callback. |
+| POST | `/api/ayrshare/webhook` | public + signed | Status callbacks from Ayrshare. |
+
+All inputs validated with Zod (per project conventions).
 
 ---
 
 ## Error States
 
-List every meaningful error the user might encounter and how the app handles it:
-
-- [ ] Network failure
-- [ ] Auth token expired
-- [ ] [App-specific errors]
+- [ ] Network failure on any external API (Spotify, Drive, Ayrshare) — retry with backoff; surface to user with retry CTA.
+- [ ] Auth/OAuth token expired — silent refresh; on failure, prompt re-connect.
+- [ ] Render failure (Remotion crash, FFmpeg error) — mark render `failed`, show error inline, allow retry.
+- [ ] Ayrshare post rejection (e.g. IG aspect ratio off, TikTok caption too long) — surface specific error from Ayrshare; suggest fix.
+- [ ] Spotify track not yet released (no analysis available) — fallback to local audio analysis.
+- [ ] Google Drive file too large or unsupported codec — flag during import; suggest re-export.
+- [ ] User exceeds Ayrshare plan limits — warn before scheduling; link to upgrade.
 
 ---
 
 ## Tech Stack Decisions
 
-| Layer      | Choice               | Why                                   |
-| ---------- | -------------------- | ------------------------------------- |
-| Frontend   | Next.js 15           | App Router, TypeScript, Vercel-native |
-| Styling    | Tailwind CSS         | Fast iteration, Claude writes it well |
-| Database   | [e.g. Supabase]      | [reason]                              |
-| Auth       | [e.g. Supabase Auth] | [reason]                              |
-| Deployment | Vercel               | Next.js native, preview deployments   |
+| Layer | Choice | Why |
+|---|---|---|
+| Frontend | Next.js 15 + TypeScript | Per project template; Vercel-native. |
+| Styling | Tailwind CSS | Per project conventions. |
+| Database | Supabase Postgres | Auth, Storage, RLS, realtime — all in one. RLS is critical for per-artist tenancy. |
+| Auth | Supabase Auth | Email magic link to start; OAuth (Google) later. |
+| File storage | Supabase Storage | Audio, artwork, rendered videos, clip thumbnails. |
+| Video rendering | [Remotion](https://www.remotion.dev) | React-based programmatic video; version-controlled templates; brand consistency. Self-host renderer initially; move to Remotion Lambda if/when volume justifies. |
+| Audio analysis | Spotify Audio Analysis API (released tracks) + FFmpeg/local fallback | Free, accurate, has structural segmentation. |
+| Social publishing | [Ayrshare](https://www.ayrshare.com) | One API for IG/TikTok/YT Shorts/X/Threads/FB; avoids fighting six native APIs and their review processes. |
+| Google Drive | Google Drive API v3 | Direct import of drone footage without manual download/upload. |
+| Smart links | Self-hosted (simple per-DSP redirect) or [Linkfire](https://www.linkfire.com)/[Songwhip](https://songwhip.com) | Start self-hosted; switch if it becomes a maintenance burden. |
+| Deployment | Vercel | Per template. |
+| Background jobs | Vercel cron + Supabase queue table | Renders, scheduled posts, Drive sync. Upgrade to dedicated worker (Inngest/Trigger.dev) only if needed. |
 
 ---
 
@@ -128,14 +267,78 @@ List every meaningful error the user might encounter and how the app handles it:
 ```
 # .env.example
 NEXT_PUBLIC_APP_URL=http://localhost:3000
-# Add all required vars here with placeholder values
+
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+
+# Spotify (Audio Analysis API)
+SPOTIFY_CLIENT_ID=
+SPOTIFY_CLIENT_SECRET=
+
+# Google (Drive)
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+
+# Ayrshare
+AYRSHARE_API_KEY=
+AYRSHARE_WEBHOOK_SECRET=
+
+# Remotion Lambda (only if/when we move off self-host)
+REMOTION_AWS_ACCESS_KEY_ID=
+REMOTION_AWS_SECRET_ACCESS_KEY=
+REMOTION_AWS_REGION=
 ```
 
 ---
 
+## Pricing & Cost Model (AUD, approximate)
+
+| Service | Dev/early | Once publishing at volume |
+|---|---|---|
+| Supabase | Free tier | Pro ~$38/mo |
+| Vercel | Free hobby | Pro ~$30/mo |
+| Ayrshare | Basic ~$30/mo | Premium ~$225/mo |
+| Remotion | Free self-host | Lambda ~$5-15/mo |
+| Spotify API | Free | Free |
+| Google Drive API | Free | Free |
+| **Total** | **~$30-70/mo AUD** | **~$265-310/mo AUD** |
+
+---
+
+## Visual & Brand (illutible default kit)
+
+Default brand kit for the primary artist, pre-seeded:
+
+- **Wordmark/logo:** existing "illutible" stylised wordmark (white on black). Pull from SoundCloud avatar as starting asset.
+- **Palette:** dark backgrounds (near-black), white text, accent from track artwork (sampled per track).
+- **Aesthetic:** cinematic, atmospheric, slightly dystopian, painterly. Banner artwork sets the tone (dramatic skylines, weather, light).
+- **Typography:** TBC. Default to a clean modern sans (Inter or similar) for UI; track titles in something with more character (TBC during design pass).
+- **Voice/tone for captions:** evocative, sparse, mood-led. Avoid hype-bro voice. Sentence fragments OK. "Made by hand" is fine to surface occasionally but not in every caption.
+
+---
+
+## Multi-Artist Architecture Notes
+
+Every domain table has `artist_id`. Supabase RLS policies enforce that a user can only read/write rows for artists they're a member of. No global queries — every query is artist-scoped from the API layer down.
+
+Active artist is stored in user session/cookie. Artist switcher in nav changes the active scope; all pages re-fetch on switch.
+
+Per-artist Ayrshare profile keys mean each artist has its own social account set — no cross-contamination of post destinations.
+
+---
+
+## Resolved Decisions
+
+- **Product name** — working name "Music Promo Radifier" stays for v1. Final name deferred; not blocking the build.
+- **Smart links** — **self-host.** Simple per-track redirect page that fans out to all DSPs. One fewer SaaS bill. Lives in this app.
+- **Social publishing** — **Ayrshare for v1.** Revisit moving to native APIs only if cost or feature gaps force it.
+- **Sync licensing tooling** — **deferred to a later phase.** Definitely wanted, not in v1. Data model already accommodates per-track metadata (ISRC, mood tags) that future sync flows will need, so this is additive.
+- **Render queue infra** — **start self-hosted on Vercel functions.** Measure render times in real use. Upgrade to Remotion Lambda or dedicated worker (Inngest/Trigger.dev) only when measured timeouts force the move.
+- **Unreleased-track analysis** — **local analysis on uploaded audio file**, not SoundCloud integration. SoundCloud API is effectively closed to new app registrations and doesn't expose audio analysis anyway, so a SC link doesn't save a step. The natural flow is: artist uploads the audio file directly (the same WAV/MP3 they'd export from their DAW), and the tool runs local analysis (FFmpeg + beat/onset detection) to find hooks. For released tracks, prefer Spotify Audio Analysis when a `spotify_id` is present; fall back to local otherwise.
+- **Platform target** — **desktop-first for v1.** Posting may happen on phone in future, but the production-heavy workflow (rendering, batch approval, campaign planning) is desktop-native. Mobile-friendly is a v2 enhancement, not a v1 requirement.
+
 ## Open Questions
 
-Things that need a decision before or during build:
-
-- [ ] Question 1
-- [ ] Question 2
+*(None blocking v1. Add here as new decisions arise.)*

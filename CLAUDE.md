@@ -1,7 +1,4 @@
-# Claude App Template
-
-> This is a reusable template for building production-quality Next.js apps with Claude Code.
-> When starting a new project: update this file with project-specific details, fill in PROJECT_SPEC.md, then delete this note.
+# Music Promo Radifier
 
 > **See also:** `~/.claude/CLAUDE.md` for user-level cross-project rules (task summary format, git push offer convention, etc.).
 
@@ -9,8 +6,8 @@
 
 ## Project Overview
 
-**App name:** [APP_NAME]
-**What it does:** [ONE_LINE_DESCRIPTION]
+**App name:** Music Promo Radifier (working name — final name TBD; see PROJECT_SPEC.md "Open Questions")
+**What it does:** Track in → ten posts out. Detects the most reel-worthy section of an artist's track, auto-cuts it against their own drone/B-roll footage, renders platform-specific variants in a consistent brand, and publishes everywhere in one approval step. Multi-artist from day 1.
 
 Read `PROJECT_SPEC.md` before writing any code. Treat it as the source of truth for features, data models, and scope.
 
@@ -20,7 +17,11 @@ Read `PROJECT_SPEC.md` before writing any code. Treat it as the source of truth 
 - **Testing:** Vitest + Testing Library
 - **Linting:** ESLint + Prettier
 - **Deployment:** Vercel
-- **Database/Auth:** [e.g. Supabase — update per project]
+- **Database/Auth:** Supabase (Postgres + Auth + Storage + RLS)
+- **Video rendering:** Remotion (programmatic React video templates)
+- **Social publishing:** Ayrshare (one API for IG / TikTok / YT Shorts / X / Threads / FB)
+- **Audio analysis:** Spotify Audio Analysis API + FFmpeg local fallback
+- **External integrations:** Google Drive (drone footage import), Spotify (track analysis + linking)
 
 ## File Structure
 
