@@ -69,6 +69,8 @@ export const BasicReel: React.FC<BasicReelProps> = ({
 
 const SANS = '"Helvetica Neue", Helvetica, Arial, sans-serif'
 
+const WORDMARK_CENTROID_OFFSET_PCT = 1.11
+
 const TitleOverlay: React.FC<{
   trackTitle: string
   artistName: string
@@ -109,6 +111,7 @@ const TitleOverlay: React.FC<{
             width: '70%',
             height: 'auto',
             marginBottom: 28,
+            transform: `translateX(${WORDMARK_CENTROID_OFFSET_PCT}%)`,
             filter: 'drop-shadow(0 4px 18px rgba(0,0,0,0.6))',
           }}
         />
@@ -159,6 +162,7 @@ const Watermark: React.FC<{ artistName: string; wordmarkFile?: string }> = ({
           width: 280,
           height: 'auto',
           opacity: 0.55,
+          transform: `translateX(${WORDMARK_CENTROID_OFFSET_PCT}%)`,
           filter: 'drop-shadow(0 2px 10px rgba(0,0,0,0.8))',
           pointerEvents: 'none',
         }}
@@ -227,6 +231,7 @@ const EndCTA: React.FC<{ ctaText: string; wordmarkFile?: string }> = ({
             width: '60%',
             height: 'auto',
             marginBottom: 26,
+            transform: `translateX(${WORDMARK_CENTROID_OFFSET_PCT}%)`,
             filter: 'drop-shadow(0 4px 18px rgba(0,0,0,0.6))',
           }}
         />

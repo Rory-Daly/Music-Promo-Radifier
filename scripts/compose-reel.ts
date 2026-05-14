@@ -301,8 +301,8 @@ function preprocessClip(
     const ff = spawn('ffmpeg', [
       '-y',
       '-ss', '0',
-      '-i', sourcePath,
       '-t', String(sourceDurationSeconds),
+      '-i', sourcePath,
       '-vf', `${setptsFilter}scale=-2:1920:flags=lanczos,crop=1080:1920,setsar=1`,
       '-r', String(fps),
       '-c:v', 'libx264',
