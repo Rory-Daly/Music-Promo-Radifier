@@ -1,6 +1,9 @@
 import React from 'react'
 import { Composition } from 'remotion'
 import { BasicReel, type BasicReelProps } from './BasicReel'
+import { installCustomFonts } from './fonts'
+
+installCustomFonts()
 
 const FPS = 30
 

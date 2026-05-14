@@ -67,7 +67,8 @@ export const BasicReel: React.FC<BasicReelProps> = ({
   )
 }
 
-const SANS = '"Helvetica Neue", Helvetica, Arial, sans-serif'
+const SANS =
+  '"Battery Park", "Battery Park Display", "Oswald", "Helvetica Neue Condensed", "Helvetica Neue", Helvetica, Arial, sans-serif'
 
 const WORDMARK_CENTROID_OFFSET_PCT = 1.11
 
