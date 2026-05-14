@@ -107,6 +107,8 @@ Do NOT:
 
 Work autonomously. Complete the full task before summarising. If two approaches are equally valid, pick the better one and note your choice briefly. Do not pause mid-task to ask clarifying questions unless you are genuinely blocked.
 
+When sharing links to files in the project, always include the full absolute path and make it clickable (e.g. `[filename](file:///absolute/path/to/file)`).
+
 After completing a task, briefly state: what you built, any deviations from the spec, and what remains.
 
 ## Environment Variables
