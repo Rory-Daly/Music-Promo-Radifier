@@ -21,6 +21,10 @@ const argsSchema = z.object({
   beatsPerBar: z.coerce.number().int().positive().default(4),
   downbeatOffset: z.coerce.number().min(0).optional(),
   noAlign: z.coerce.boolean().default(false),
+  title: z.string().optional(),
+  artist: z.string().default('illutible'),
+  cta: z.string().default('illutible.com'),
+  noOverlays: z.coerce.boolean().default(false),
 })
 
 type Args = z.infer<typeof argsSchema>
@@ -84,6 +88,11 @@ Optional:
   --downbeatOffset=S   Seconds from hook start to first downbeat.
                        Overrides auto-detection.
   --noAlign=true       Skip beat alignment entirely (even-distribution cuts).
+  --title=TEXT         Track title to show at the start. Auto-derived from
+                       audio filename if omitted (e.g. Hope-v9.wav -> Hope).
+  --artist=NAME        Artist wordmark text. Default: illutible.
+  --cta=TEXT           End-card call-to-action text. Default: illutible.com.
+  --noOverlays=true    Skip brand overlays entirely (clean footage only).
 
 Beat alignment is on by default. BPM and downbeat phase are auto-detected
 from the hook range. Use --bpm and --downbeatOffset to override.
@@ -202,6 +211,9 @@ async function main(): Promise<void> {
       durationSeconds,
       clipFiles: clipNames,
       clipDurationsSeconds,
+      trackTitle: args.noOverlays ? '' : (args.title ?? deriveTitle(args.audio)),
+      artistName: args.artist,
+      ctaText: args.noOverlays ? '' : args.cta,
     }
 
     console.log(`Bundling Remotion project...`)
@@ -244,6 +256,13 @@ async function main(): Promise<void> {
   } finally {
     rmSync(publicDir, { recursive: true, force: true })
   }
+}
+
+function deriveTitle(audioPath: string): string {
+  const base = basename(audioPath)
+  const withoutExt = base.replace(/\.[^.]+$/, '')
+  const withoutVersion = withoutExt.replace(/-v\d+$/i, '')
+  return withoutVersion.replace(/[-_]+/g, ' ').trim()
 }
 
 function preprocessClip(

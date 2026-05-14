@@ -20,6 +20,9 @@ export const Root: React.FC = () => {
             audioStartSeconds: 0,
             durationSeconds: 20,
             clipFiles: [],
+            trackTitle: '',
+            artistName: 'illutible',
+            ctaText: 'illutible.com',
           } satisfies BasicReelProps
         }
         calculateMetadata={({ props }) => ({
