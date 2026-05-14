@@ -1,5 +1,5 @@
 {
-  "name": "claude-app-template",
+  "name": "legatograph",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -16,12 +16,16 @@
     "prepare": "husky",
     "size": "size-limit",
     "hooks:detect": "tsx scripts/detect-hooks.ts",
-    "reel:compose": "tsx scripts/compose-reel.ts"
+    "reel:compose": "tsx scripts/compose-reel.ts",
+    "reel:auto": "tsx scripts/reel-auto.ts"
   },
   "dependencies": {
     "@remotion/bundler": "^4.0.460",
     "@remotion/cli": "^4.0.460",
+    "@remotion/google-fonts": "^4.0.461",
     "@remotion/renderer": "^4.0.460",
+    "@supabase/ssr": "^0.10.3",
+    "@supabase/supabase-js": "^2.105.4",
     "@vercel/speed-insights": "^2.0.0",
     "clsx": "^2.1.1",
     "fft.js": "^4.0.4",

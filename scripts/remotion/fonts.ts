@@ -1,4 +1,9 @@
+import { loadFont as loadInter } from '@remotion/google-fonts/Inter'
+import { loadFont as loadOswald } from '@remotion/google-fonts/Oswald'
 import { continueRender, delayRender, staticFile } from 'remotion'
+
+loadInter('normal', { weights: ['400', '500', '600', '700'] })
+loadOswald('normal', { weights: ['400', '500', '600', '700'] })
 
 type FontDefinition = {
   family: string
@@ -7,7 +12,7 @@ type FontDefinition = {
   style?: string
 }
 
-const fontDefinitions: FontDefinition[] = [
+const customFontDefinitions: FontDefinition[] = [
   { family: 'Battery Park', fileName: 'BatteryPark.ttf' },
   { family: 'Battery Park', fileName: 'BatteryPark.otf' },
 ]
@@ -24,7 +29,7 @@ export function installCustomFonts(): void {
       return
     }
     const styleEl = document.createElement('style')
-    const declarations = fontDefinitions
+    const declarations = customFontDefinitions
       .map(({ family, fileName, weight = 'normal', style = 'normal' }) => {
         const url = staticFile(fileName)
         return `@font-face {
@@ -41,3 +46,6 @@ export function installCustomFonts(): void {
     continueRender(handle)
   })()
 }
+
+export const DISPLAY_FONT = '"Battery Park", "Oswald", "Helvetica Neue Condensed", "Impact", sans-serif'
+export const SANS_FONT = '"Inter", "Helvetica Neue", Helvetica, Arial, sans-serif'

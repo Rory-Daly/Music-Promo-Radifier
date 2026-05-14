@@ -10,6 +10,7 @@ import {
   useVideoConfig,
   interpolate,
 } from 'remotion'
+import { DISPLAY_FONT, SANS_FONT } from './fonts'
 
 export type BasicReelProps = {
   audioFile: string
@@ -67,9 +68,6 @@ export const BasicReel: React.FC<BasicReelProps> = ({
   )
 }
 
-const SANS =
-  '"Battery Park", "Battery Park Display", "Oswald", "Helvetica Neue Condensed", "Helvetica Neue", Helvetica, Arial, sans-serif'
-
 const WORDMARK_CENTROID_OFFSET_PCT = 1.11
 
 const TitleOverlay: React.FC<{
@@ -101,7 +99,6 @@ const TitleOverlay: React.FC<{
         alignItems: 'center',
         paddingTop: '14%',
         color: '#fff',
-        fontFamily: SANS,
         pointerEvents: 'none',
       }}
     >
@@ -119,6 +116,7 @@ const TitleOverlay: React.FC<{
       ) : (
         <div
           style={{
+            fontFamily: SANS_FONT,
             fontSize: 28,
             letterSpacing: '0.42em',
             fontWeight: 300,
@@ -133,13 +131,14 @@ const TitleOverlay: React.FC<{
       )}
       <div
         style={{
-          fontSize: 64,
+          fontFamily: DISPLAY_FONT,
+          fontSize: 84,
           fontWeight: 500,
-          letterSpacing: '-0.01em',
+          letterSpacing: '0.02em',
           textAlign: 'center',
-          maxWidth: '85%',
-          lineHeight: 1.1,
-          textShadow: '0 4px 24px rgba(0,0,0,0.7)',
+          maxWidth: '88%',
+          lineHeight: 1.05,
+          textShadow: '0 4px 24px rgba(0,0,0,0.75)',
         }}
       >
         {trackTitle}
@@ -177,7 +176,7 @@ const Watermark: React.FC<{ artistName: string; wordmarkFile?: string }> = ({
         bottom: 56,
         left: 48,
         color: '#fff',
-        fontFamily: SANS,
+        fontFamily: SANS_FONT,
         fontSize: 22,
         fontWeight: 600,
         letterSpacing: '0.42em',
@@ -221,7 +220,7 @@ const EndCTA: React.FC<{ ctaText: string; wordmarkFile?: string }> = ({
         alignItems: 'center',
         paddingBottom: '14%',
         color: '#fff',
-        fontFamily: SANS,
+        fontFamily: SANS_FONT,
         pointerEvents: 'none',
       }}
     >
@@ -239,8 +238,9 @@ const EndCTA: React.FC<{ ctaText: string; wordmarkFile?: string }> = ({
       )}
       <div
         style={{
-          fontSize: 28,
-          letterSpacing: '0.32em',
+          fontSize: 22,
+          letterSpacing: '0.42em',
+          fontWeight: 500,
           opacity: 0.85,
           marginBottom: 14,
           textTransform: 'uppercase',
@@ -251,9 +251,9 @@ const EndCTA: React.FC<{ ctaText: string; wordmarkFile?: string }> = ({
       </div>
       <div
         style={{
-          fontSize: 44,
-          fontWeight: 500,
-          letterSpacing: '0.02em',
+          fontSize: 42,
+          fontWeight: 600,
+          letterSpacing: '-0.01em',
           textShadow: '0 4px 18px rgba(0,0,0,0.7)',
         }}
       >
