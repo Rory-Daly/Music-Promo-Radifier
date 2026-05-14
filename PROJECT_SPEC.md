@@ -1,4 +1,4 @@
-# Project Specification — Music Promo Radifier (working name)
+# Project Specification — Legatograph
 
 > Source of truth for v1 scope, data model, and architecture. Update this file before adding/changing user-facing functionality.
 
@@ -331,7 +331,7 @@ Per-artist Ayrshare profile keys mean each artist has its own social account set
 
 ## Resolved Decisions
 
-- **Product name** — working name "Music Promo Radifier" stays for v1. Final name deferred; not blocking the build.
+- **Product name** — **Legatograph**. Musical term *legato* (smoothly connected notes) + *-graph* (written / recorded). Fits the act of smoothly assembling track + footage at beat boundaries.
 - **Smart links** — **self-host.** Simple per-track redirect page that fans out to all DSPs. One fewer SaaS bill. Lives in this app.
 - **Social publishing** — **Ayrshare for v1.** Revisit moving to native APIs only if cost or feature gaps force it.
 - **Sync licensing tooling** — **deferred to a later phase.** Definitely wanted, not in v1. Data model already accommodates per-track metadata (ISRC, mood tags) that future sync flows will need, so this is additive.

@@ -1,4 +1,4 @@
-# Music Promo Radifier
+# Legatograph
 
 > **See also:** `~/.claude/CLAUDE.md` for user-level cross-project rules (task summary format, git push offer convention, etc.).
 
@@ -6,7 +6,7 @@
 
 ## Project Overview
 
-**App name:** Music Promo Radifier (working name — final name TBD; see PROJECT_SPEC.md "Open Questions")
+**App name:** Legatograph
 **What it does:** Track in → ten posts out. Detects the most reel-worthy section of an artist's track, auto-cuts it against their own drone/B-roll footage, renders platform-specific variants in a consistent brand, and publishes everywhere in one approval step. Multi-artist from day 1.
 
 Read `PROJECT_SPEC.md` before writing any code. Treat it as the source of truth for features, data models, and scope.
