@@ -15,14 +15,20 @@
     "check": "npm run typecheck && npm run lint && npm run test run",
     "prepare": "husky",
     "size": "size-limit",
-    "hooks:detect": "tsx scripts/detect-hooks.ts"
+    "hooks:detect": "tsx scripts/detect-hooks.ts",
+    "reel:compose": "tsx scripts/compose-reel.ts"
   },
   "dependencies": {
+    "@remotion/bundler": "^4.0.460",
+    "@remotion/cli": "^4.0.460",
+    "@remotion/renderer": "^4.0.460",
     "@vercel/speed-insights": "^2.0.0",
     "clsx": "^2.1.1",
+    "fft.js": "^4.0.4",
     "next": "^16.2.4",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
+    "remotion": "^4.0.460",
     "tailwind-merge": "^3.5.0",
     "zod": "^3.23.8"
   },
