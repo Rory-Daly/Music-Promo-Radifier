@@ -2,6 +2,7 @@ import React from 'react'
 import {
   AbsoluteFill,
   Audio,
+  Img,
   OffthreadVideo,
   Sequence,
   staticFile,
@@ -19,6 +20,7 @@ export type BasicReelProps = {
   trackTitle?: string
   artistName?: string
   ctaText?: string
+  wordmarkFile?: string
 }
 
 export const BasicReel: React.FC<BasicReelProps> = ({
@@ -29,6 +31,7 @@ export const BasicReel: React.FC<BasicReelProps> = ({
   trackTitle,
   artistName = 'illutible',
   ctaText = 'illutible.com',
+  wordmarkFile,
 }) => {
   const { fps, durationInFrames } = useVideoConfig()
   const clipFrames = computeClipFrames(clipFiles.length, durationInFrames, clipDurationsSeconds, fps)
@@ -51,19 +54,26 @@ export const BasicReel: React.FC<BasicReelProps> = ({
         )
       })}
       <Audio src={staticFile(audioFile)} startFrom={Math.round(audioStartSeconds * fps)} />
-      {trackTitle && <TitleOverlay trackTitle={trackTitle} artistName={artistName} />}
-      <Watermark artistName={artistName} />
-      {ctaText && <EndCTA ctaText={ctaText} />}
+      {trackTitle && (
+        <TitleOverlay
+          trackTitle={trackTitle}
+          artistName={artistName}
+          wordmarkFile={wordmarkFile}
+        />
+      )}
+      <Watermark artistName={artistName} wordmarkFile={wordmarkFile} />
+      {ctaText && <EndCTA ctaText={ctaText} wordmarkFile={wordmarkFile} />}
     </AbsoluteFill>
   )
 }
 
 const SANS = '"Helvetica Neue", Helvetica, Arial, sans-serif'
 
-const TitleOverlay: React.FC<{ trackTitle: string; artistName: string }> = ({
-  trackTitle,
-  artistName,
-}) => {
+const TitleOverlay: React.FC<{
+  trackTitle: string
+  artistName: string
+  wordmarkFile?: string
+}> = ({ trackTitle, artistName, wordmarkFile }) => {
   const frame = useCurrentFrame()
   const { fps } = useVideoConfig()
   const opacity = interpolate(
@@ -79,36 +89,48 @@ const TitleOverlay: React.FC<{ trackTitle: string; artistName: string }> = ({
         top: 0,
         left: 0,
         right: 0,
-        height: '45%',
+        height: '50%',
         background:
-          'linear-gradient(180deg, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.45) 50%, rgba(0,0,0,0) 100%)',
+          'linear-gradient(180deg, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.4) 55%, rgba(0,0,0,0) 100%)',
         opacity,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        paddingTop: '18%',
+        paddingTop: '14%',
         color: '#fff',
         fontFamily: SANS,
         pointerEvents: 'none',
       }}
     >
+      {wordmarkFile ? (
+        <Img
+          src={staticFile(wordmarkFile)}
+          style={{
+            width: '70%',
+            height: 'auto',
+            marginBottom: 28,
+            filter: 'drop-shadow(0 4px 18px rgba(0,0,0,0.6))',
+          }}
+        />
+      ) : (
+        <div
+          style={{
+            fontSize: 28,
+            letterSpacing: '0.42em',
+            fontWeight: 300,
+            opacity: 0.75,
+            textTransform: 'uppercase',
+            marginBottom: 24,
+            textShadow: '0 2px 12px rgba(0,0,0,0.6)',
+          }}
+        >
+          {artistName}
+        </div>
+      )}
       <div
         style={{
-          fontSize: 28,
-          letterSpacing: '0.42em',
-          fontWeight: 300,
-          opacity: 0.75,
-          textTransform: 'uppercase',
-          marginBottom: 24,
-          textShadow: '0 2px 12px rgba(0,0,0,0.6)',
-        }}
-      >
-        {artistName}
-      </div>
-      <div
-        style={{
-          fontSize: 72,
-          fontWeight: 700,
+          fontSize: 64,
+          fontWeight: 500,
           letterSpacing: '-0.01em',
           textAlign: 'center',
           maxWidth: '85%',
@@ -122,7 +144,27 @@ const TitleOverlay: React.FC<{ trackTitle: string; artistName: string }> = ({
   )
 }
 
-const Watermark: React.FC<{ artistName: string }> = ({ artistName }) => {
+const Watermark: React.FC<{ artistName: string; wordmarkFile?: string }> = ({
+  artistName,
+  wordmarkFile,
+}) => {
+  if (wordmarkFile) {
+    return (
+      <Img
+        src={staticFile(wordmarkFile)}
+        style={{
+          position: 'absolute',
+          bottom: 56,
+          left: 48,
+          width: 280,
+          height: 'auto',
+          opacity: 0.55,
+          filter: 'drop-shadow(0 2px 10px rgba(0,0,0,0.8))',
+          pointerEvents: 'none',
+        }}
+      />
+    )
+  }
   return (
     <div
       style={{
@@ -145,7 +187,10 @@ const Watermark: React.FC<{ artistName: string }> = ({ artistName }) => {
   )
 }
 
-const EndCTA: React.FC<{ ctaText: string }> = ({ ctaText }) => {
+const EndCTA: React.FC<{ ctaText: string; wordmarkFile?: string }> = ({
+  ctaText,
+  wordmarkFile,
+}) => {
   const frame = useCurrentFrame()
   const { fps, durationInFrames } = useVideoConfig()
   const fadeStart = durationInFrames - 3 * fps
@@ -161,25 +206,36 @@ const EndCTA: React.FC<{ ctaText: string }> = ({ ctaText }) => {
         bottom: 0,
         left: 0,
         right: 0,
-        height: '45%',
+        height: '50%',
         background:
-          'linear-gradient(0deg, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.45) 50%, rgba(0,0,0,0) 100%)',
+          'linear-gradient(0deg, rgba(0,0,0,0.88) 0%, rgba(0,0,0,0.4) 55%, rgba(0,0,0,0) 100%)',
         opacity,
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'flex-end',
         alignItems: 'center',
-        paddingBottom: '18%',
+        paddingBottom: '14%',
         color: '#fff',
         fontFamily: SANS,
         pointerEvents: 'none',
       }}
     >
+      {wordmarkFile && (
+        <Img
+          src={staticFile(wordmarkFile)}
+          style={{
+            width: '60%',
+            height: 'auto',
+            marginBottom: 26,
+            filter: 'drop-shadow(0 4px 18px rgba(0,0,0,0.6))',
+          }}
+        />
+      )}
       <div
         style={{
-          fontSize: 26,
+          fontSize: 28,
           letterSpacing: '0.32em',
-          opacity: 0.8,
+          opacity: 0.85,
           marginBottom: 14,
           textTransform: 'uppercase',
           textShadow: '0 2px 8px rgba(0,0,0,0.6)',
@@ -189,8 +245,8 @@ const EndCTA: React.FC<{ ctaText: string }> = ({ ctaText }) => {
       </div>
       <div
         style={{
-          fontSize: 52,
-          fontWeight: 700,
+          fontSize: 44,
+          fontWeight: 500,
           letterSpacing: '0.02em',
           textShadow: '0 4px 18px rgba(0,0,0,0.7)',
         }}

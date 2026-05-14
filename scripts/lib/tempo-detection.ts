@@ -30,7 +30,7 @@ export async function detectTempo(
   const preferredBpm = options.preferredBpm ?? 120
   const preferredWidth = options.preferredWidth ?? 60
 
-  const { fullOdf, lowOdf, resolutionSeconds } = await computeSpectralFluxOdfBands(
+  const { fullOdf, fullOdfRaw, lowOdf, resolutionSeconds } = await computeSpectralFluxOdfBands(
     audioFile,
     startSeconds,
     endSeconds,
@@ -45,7 +45,7 @@ export async function detectTempo(
   })
 
   const beatLagSamples = 60 / tempo.bpm / resolutionSeconds
-  const beatPhaseSamples = findBeatPhase(fullOdf, beatLagSamples)
+  const beatPhaseSamples = findBeatPhase(fullOdfRaw, beatLagSamples)
   const downbeatPhase = findDownbeatPhase(lowOdf, beatLagSamples, beatPhaseSamples, beatsPerBar)
   const downbeatOffsetSeconds =
     (beatPhaseSamples + downbeatPhase * beatLagSamples) * resolutionSeconds
@@ -111,12 +111,20 @@ export async function computeSpectralFluxOdfBands(
     windowSize?: number
     hopSize?: number
     lowBandHz?: number
+    bandPassLowHz?: number
+    bandPassHighHz?: number
+    logCompressionScale?: number
+    medianWindowSeconds?: number
   } = {},
-): Promise<{ fullOdf: number[]; lowOdf: number[]; resolutionSeconds: number }> {
+): Promise<{ fullOdf: number[]; fullOdfRaw: number[]; lowOdf: number[]; resolutionSeconds: number }> {
   const sampleRate = options.sampleRate ?? 22050
   const windowSize = options.windowSize ?? 1024
   const hopSize = options.hopSize ?? 256
   const lowBandHz = options.lowBandHz ?? 250
+  const bandPassLowHz = options.bandPassLowHz ?? 60
+  const bandPassHighHz = options.bandPassHighHz ?? 2500
+  const logScale = options.logCompressionScale ?? 1000
+  const medianWindowSeconds = options.medianWindowSeconds ?? 1
   const resolutionSeconds = hopSize / sampleRate
   const lowBandCutoffBin = Math.max(1, Math.ceil((lowBandHz / sampleRate) * windowSize))
 
@@ -135,9 +143,13 @@ export async function computeSpectralFluxOdfBands(
   }
 
   const numBins = windowSize / 2
-  const prevMag = new Float32Array(numBins)
+  const prevLogMag = new Float32Array(numBins)
+  const prevLinMag = new Float32Array(numBins)
+  const fullBandLowBin = Math.max(1, Math.ceil((bandPassLowHz / sampleRate) * windowSize))
+  const fullBandHighBin = Math.min(numBins - 1, Math.floor((bandPassHighHz / sampleRate) * windowSize))
   let isFirstFrame = true
-  const fullOdf: number[] = []
+  const fullLogOdf: number[] = []
+  const fullLinearOdf: number[] = []
   const lowOdf: number[] = []
 
   for (let start = 0; start + windowSize <= pcm.length; start += hopSize) {
@@ -147,27 +159,38 @@ export async function computeSpectralFluxOdfBands(
     }
     fft.transform(fftOutput, fftInput)
 
-    let fullFlux = 0
+    let fullLogFlux = 0
+    let fullLinearFlux = 0
     let lowFlux = 0
     for (let k = 1; k < numBins; k++) {
       const re = fftOutput[2 * k]
       const im = fftOutput[2 * k + 1]
       const mag = Math.sqrt(re * re + im * im)
+      const logMag = Math.log(1 + logScale * mag)
       if (!isFirstFrame) {
-        const diff = mag - prevMag[k]
-        if (diff > 0) {
-          fullFlux += diff
-          if (k <= lowBandCutoffBin) lowFlux += diff
+        const linDiff = mag - prevLinMag[k]
+        if (linDiff > 0) {
+          fullLinearFlux += linDiff
+          if (k <= lowBandCutoffBin) lowFlux += linDiff
+        }
+        if (k >= fullBandLowBin && k <= fullBandHighBin) {
+          const logDiff = logMag - prevLogMag[k]
+          if (logDiff > 0) fullLogFlux += logDiff
         }
       }
-      prevMag[k] = mag
+      prevLogMag[k] = logMag
+      prevLinMag[k] = mag
     }
     if (!isFirstFrame) {
-      fullOdf.push(fullFlux)
+      fullLogOdf.push(fullLogFlux)
+      fullLinearOdf.push(fullLinearFlux)
       lowOdf.push(lowFlux)
     }
     isFirstFrame = false
   }
+
+  const medianWindow = Math.max(3, Math.round(medianWindowSeconds / resolutionSeconds))
+  const fullClean = subtractMovingMedian(fullLogOdf, medianWindow)
 
   const normalize = (arr: number[]): number[] => {
     const max = arr.reduce((m, v) => (v > m ? v : m), 0)
@@ -175,10 +198,24 @@ export async function computeSpectralFluxOdfBands(
   }
 
   return {
-    fullOdf: normalize(fullOdf),
+    fullOdf: normalize(fullClean),
+    fullOdfRaw: normalize(fullLinearOdf),
     lowOdf: normalize(lowOdf),
     resolutionSeconds,
   }
+}
+
+function subtractMovingMedian(values: number[], windowSize: number): number[] {
+  const half = Math.floor(windowSize / 2)
+  const out = new Array<number>(values.length)
+  for (let i = 0; i < values.length; i++) {
+    const start = Math.max(0, i - half)
+    const end = Math.min(values.length, i + half + 1)
+    const slice = values.slice(start, end).sort((a, b) => a - b)
+    const median = slice[Math.floor(slice.length / 2)]
+    out[i] = Math.max(0, values[i] - median)
+  }
+  return out
 }
 
 export async function computeSpectralFluxOdf(
@@ -201,8 +238,13 @@ async function decodePcm(
   startSeconds: number,
   endSeconds: number,
   sampleRate: number,
+  options: { bandPassLowHz?: number; bandPassHighHz?: number } = {},
 ): Promise<Float32Array> {
   const duration = endSeconds - startSeconds
+  const filters: string[] = []
+  if (options.bandPassLowHz) filters.push(`highpass=f=${options.bandPassLowHz}`)
+  if (options.bandPassHighHz) filters.push(`lowpass=f=${options.bandPassHighHz}`)
+  const afArgs = filters.length > 0 ? ['-af', filters.join(',')] : []
   return new Promise<Float32Array>((resolve, reject) => {
     const ff = spawn('ffmpeg', [
       '-ss',
@@ -215,6 +257,7 @@ async function decodePcm(
       '1',
       '-ar',
       String(sampleRate),
+      ...afArgs,
       '-f',
       'f32le',
       '-loglevel',

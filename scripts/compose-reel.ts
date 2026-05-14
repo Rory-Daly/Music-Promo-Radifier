@@ -25,6 +25,8 @@ const argsSchema = z.object({
   artist: z.string().default('illutible'),
   cta: z.string().default('illutible.com'),
   noOverlays: z.coerce.boolean().default(false),
+  slowmo: z.coerce.number().positive().max(2).default(1),
+  wordmark: z.string().default('assets/illutible-wordmark.png'),
 })
 
 type Args = z.infer<typeof argsSchema>
@@ -93,6 +95,10 @@ Optional:
   --artist=NAME        Artist wordmark text. Default: illutible.
   --cta=TEXT           End-card call-to-action text. Default: illutible.com.
   --noOverlays=true    Skip brand overlays entirely (clean footage only).
+  --slowmo=N           Play clips at N times speed. 1.0 = normal, 0.5 = half
+                       speed (good for 60fps source). Default: 1.0.
+  --wordmark=PATH      Path to artist wordmark PNG (transparent background).
+                       Default: assets/illutible-wordmark.png.
 
 Beat alignment is on by default. BPM and downbeat phase are auto-detected
 from the hook range. Use --bpm and --downbeatOffset to override.
@@ -189,20 +195,35 @@ async function main(): Promise<void> {
       )
     }
 
-    console.log(`Pre-processing ${clipAbsList.length} clip(s) to 1080x1920 @ ${args.fps}fps...`)
+    const speedDescription = args.slowmo === 1 ? '' : ` (${args.slowmo}x speed)`
+    console.log(
+      `Pre-processing ${clipAbsList.length} clip(s) to 1080x1920 @ ${args.fps}fps${speedDescription}...`,
+    )
     const clipNames: string[] = []
     for (let i = 0; i < clipAbsList.length; i++) {
       const sourcePath = clipAbsList[i]
       const outName = `clip${i}.mp4`
       const outPath = join(publicDir, outName)
       const startMs = Date.now()
-      await preprocessClip(sourcePath, outPath, clipDurationsSeconds[i], args.fps)
+      await preprocessClip(sourcePath, outPath, clipDurationsSeconds[i], args.fps, args.slowmo)
       const elapsed = ((Date.now() - startMs) / 1000).toFixed(1)
       console.log(
         `  [${i + 1}/${clipAbsList.length}] ${basename(sourcePath)} -> ${outName} ` +
-          `(${clipDurationsSeconds[i].toFixed(2)}s, ${elapsed}s real)`,
+          `(${clipDurationsSeconds[i].toFixed(2)}s output, ${elapsed}s real)`,
       )
       clipNames.push(outName)
+    }
+
+    let wordmarkName: string | undefined
+    if (!args.noOverlays) {
+      const wordmarkPath = resolvePath(args.wordmark)
+      if (existsSync(wordmarkPath)) {
+        wordmarkName = 'wordmark.png'
+        copyFileSync(wordmarkPath, join(publicDir, wordmarkName))
+        console.log(`Brand: using wordmark ${basename(wordmarkPath)}`)
+      } else {
+        console.log(`Brand: wordmark not found at ${wordmarkPath}, falling back to text`)
+      }
     }
 
     const inputProps: BasicReelProps = {
@@ -214,6 +235,7 @@ async function main(): Promise<void> {
       trackTitle: args.noOverlays ? '' : (args.title ?? deriveTitle(args.audio)),
       artistName: args.artist,
       ctaText: args.noOverlays ? '' : args.cta,
+      wordmarkFile: wordmarkName,
     }
 
     console.log(`Bundling Remotion project...`)
@@ -268,16 +290,20 @@ function deriveTitle(audioPath: string): string {
 function preprocessClip(
   sourcePath: string,
   outputPath: string,
-  durationSeconds: number,
+  outputDurationSeconds: number,
   fps: number,
+  slowmo: number = 1,
 ): Promise<void> {
+  const sourceDurationSeconds = outputDurationSeconds * slowmo
+  const setptsFactor = 1 / slowmo
+  const setptsFilter = slowmo === 1 ? '' : `setpts=${setptsFactor}*PTS,`
   return new Promise((resolve, reject) => {
     const ff = spawn('ffmpeg', [
       '-y',
       '-ss', '0',
       '-i', sourcePath,
-      '-t', String(durationSeconds),
-      '-vf', `scale=-2:1920:flags=lanczos,crop=1080:1920,setsar=1`,
+      '-t', String(sourceDurationSeconds),
+      '-vf', `${setptsFilter}scale=-2:1920:flags=lanczos,crop=1080:1920,setsar=1`,
       '-r', String(fps),
       '-c:v', 'libx264',
       '-preset', 'fast',
