@@ -137,8 +137,9 @@ export function VaultClient({ artistId, initialTracks, initialClips }: Props) {
       const parsed = await safeParseResponse<{
         error?: string
         imported?: number
+        updated?: number
+        thumbnails?: number
         total?: number
-        skipped?: number
         message?: string
       }>(res)
       if (!res.ok) {
@@ -147,11 +148,15 @@ export function VaultClient({ artistId, initialTracks, initialClips }: Props) {
       }
       const body = parsed.body ?? {}
       const imported = body.imported ?? 0
-      const skipped = body.skipped ?? 0
+      const updated = body.updated ?? 0
+      const thumbnails = body.thumbnails ?? 0
+      const parts: string[] = []
+      if (imported > 0) parts.push(`imported ${imported}`)
+      if (updated > 0) parts.push(`updated ${updated}`)
+      if (thumbnails > 0)
+        parts.push(`generated ${thumbnails} thumbnail${thumbnails === 1 ? '' : 's'}`)
       const note =
-        imported === 0
-          ? (body.message ?? 'Nothing new to import.')
-          : `Imported ${imported} clip${imported === 1 ? '' : 's'}${skipped ? ` (${skipped} already present)` : ''}.`
+        parts.length === 0 ? (body.message ?? 'Nothing changed.') : parts.join(', ') + '.'
       setUploadState({ kind: 'success', message: note })
       form.reset()
       startTransition(() => router.refresh())

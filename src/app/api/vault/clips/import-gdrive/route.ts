@@ -104,6 +104,14 @@ async function handle(request: NextRequest) {
       .map((r) => [r.gdrive_file_id, r]),
   )
 
+  // A thumbnail_url is "ours" if it lives under our Supabase project's
+  // thumbnails bucket. Anything else (null, a stale Drive auth-gated URL
+  // from older imports, etc.) we treat as missing and try to regenerate.
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+  const ourThumbnailPrefix = `${supabaseUrl}/storage/v1/object/public/thumbnails/`
+  const isOurThumbnail = (url: string | null | undefined) =>
+    !!supabaseUrl && !!url && url.startsWith(ourThumbnailPrefix)
+
   // Decide work per file: clip UUID, whether we need a fresh thumbnail.
   type WorkItem = {
     file: DriveFile
@@ -116,7 +124,7 @@ async function handle(request: NextRequest) {
     return {
       file,
       clipId: ex?.id ?? randomUUID(),
-      needsThumbnail: !ex?.thumbnail_url,
+      needsThumbnail: !isOurThumbnail(ex?.thumbnail_url),
       isNew: !ex,
     }
   })
@@ -144,8 +152,19 @@ async function handle(request: NextRequest) {
   // Build upsert payload. `tags` is omitted on purpose — Postgres
   // preserves the existing column on update, and uses its default `{}`
   // on insert.
+  //
+  // thumbnail_url resolution order:
+  //   1. URL just generated this run.
+  //   2. Existing URL if it lives in our bucket (already valid).
+  //   3. null — clears stale legacy Drive URLs from older imports so the
+  //      UI can fall back to the lh3 placeholder or "thumbnail unavailable"
+  //      without showing a broken auth-gated image.
   const rows = work.map((w) => {
     const existingRow = existingByFileId.get(w.file.id)
+    const generated = thumbnailUrls.get(w.file.id) ?? null
+    const keepExisting = isOurThumbnail(existingRow?.thumbnail_url)
+      ? existingRow!.thumbnail_url
+      : null
     return {
       id: w.clipId,
       artist_id: artistId,
@@ -155,8 +174,7 @@ async function handle(request: NextRequest) {
       duration_seconds: w.file.durationSeconds,
       width: w.file.width,
       height: w.file.height,
-      thumbnail_url:
-        thumbnailUrls.get(w.file.id) ?? existingRow?.thumbnail_url ?? null,
+      thumbnail_url: generated ?? keepExisting,
     }
   })
 
