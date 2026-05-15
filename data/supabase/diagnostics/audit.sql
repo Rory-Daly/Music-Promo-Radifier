@@ -69,7 +69,8 @@ storage_policies as (
     and policyname ~ '^(tracks|clips|renders)_(read|insert|update|delete)_member$'
 ),
 rpc_grants as (
-  select grantee
+  -- grantee is sql_identifier (a domain over text); cast so array ops below resolve.
+  select grantee::text as grantee
   from information_schema.routine_privileges
   where routine_schema = 'public'
     and routine_name = 'create_artist_with_owner'
