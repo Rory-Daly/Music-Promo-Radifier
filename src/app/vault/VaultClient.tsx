@@ -5,6 +5,9 @@ import { useState, useTransition, type FormEvent } from 'react'
 import { cn } from '@/lib/utils'
 import type { ClipRow, TrackRow } from '@/lib/supabase/queries'
 
+export type SignedTrackRow = TrackRow & { signedUrl: string | null }
+export type SignedClipRow = ClipRow & { signedUrl: string | null }
+
 type Tab = 'tracks' | 'clips'
 
 type UploadState =
@@ -15,8 +18,8 @@ type UploadState =
 
 type Props = {
   artistId: string
-  initialTracks: TrackRow[]
-  initialClips: ClipRow[]
+  initialTracks: SignedTrackRow[]
+  initialClips: SignedClipRow[]
 }
 
 export function VaultClient({ artistId, initialTracks, initialClips }: Props) {
@@ -233,7 +236,7 @@ function Banner({
   )
 }
 
-function TrackList({ tracks }: { tracks: TrackRow[] }) {
+function TrackList({ tracks }: { tracks: SignedTrackRow[] }) {
   if (tracks.length === 0) {
     return <p className="text-sm text-neutral-400">No tracks yet.</p>
   }
@@ -241,14 +244,23 @@ function TrackList({ tracks }: { tracks: TrackRow[] }) {
     <ul className="divide-y divide-neutral-800 rounded-md border border-neutral-800">
       {tracks.map((track) => (
         <li key={track.id} className="flex items-center justify-between gap-4 px-4 py-3">
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium text-neutral-100">{track.title}</p>
             <p className="text-xs text-neutral-500">
               {track.duration_seconds ? formatSeconds(track.duration_seconds) : '—'}
               {track.bpm ? ` · ${track.bpm.toFixed(0)} BPM` : ''}
             </p>
+            {track.signedUrl ? (
+               
+              <audio
+                src={track.signedUrl}
+                controls
+                preload="metadata"
+                className="mt-2 h-8 w-full max-w-md"
+              />
+            ) : null}
           </div>
-          <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-neutral-500">
+          <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.2em] text-neutral-500">
             {new Date(track.created_at).toLocaleDateString()}
           </span>
         </li>
@@ -257,7 +269,7 @@ function TrackList({ tracks }: { tracks: TrackRow[] }) {
   )
 }
 
-function ClipList({ clips }: { clips: ClipRow[] }) {
+function ClipList({ clips }: { clips: SignedClipRow[] }) {
   if (clips.length === 0) {
     return <p className="text-sm text-neutral-400">No clips yet.</p>
   }
@@ -266,15 +278,32 @@ function ClipList({ clips }: { clips: ClipRow[] }) {
       {clips.map((clip) => (
         <li
           key={clip.id}
-          className="aspect-[9/16] rounded-md border border-neutral-800 bg-neutral-900/40 p-3"
+          className="overflow-hidden rounded-md border border-neutral-800 bg-neutral-900/40"
         >
-          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-neutral-500">clip</p>
-          <p className="mt-1 truncate text-xs text-neutral-300">
-            {clip.duration_seconds ? `${clip.duration_seconds.toFixed(1)}s` : '—'}
-          </p>
-          <p className="mt-1 text-[10px] text-neutral-500">
-            {new Date(clip.created_at).toLocaleDateString()}
-          </p>
+          <div className="aspect-[9/16] bg-neutral-950">
+            {clip.signedUrl ? (
+               
+              <video
+                src={clip.signedUrl}
+                muted
+                playsInline
+                preload="metadata"
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-neutral-600">
+                no preview
+              </div>
+            )}
+          </div>
+          <div className="space-y-1 px-2 py-1.5">
+            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-neutral-500">
+              {clip.duration_seconds ? `${clip.duration_seconds.toFixed(1)}s` : '—'}
+            </p>
+            <p className="text-[10px] text-neutral-500">
+              {new Date(clip.created_at).toLocaleDateString()}
+            </p>
+          </div>
         </li>
       ))}
     </ul>

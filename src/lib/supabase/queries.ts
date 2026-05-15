@@ -127,6 +127,30 @@ export async function listTracks(artistId: string): Promise<TrackRow[]> {
   return (data ?? []) as TrackRow[]
 }
 
+export type HookRow = {
+  id: string
+  track_id: string
+  start_seconds: number
+  end_seconds: number
+  score: number | null
+  label: string | null
+}
+
+export async function listHooksForTracks(trackIds: string[]): Promise<HookRow[]> {
+  if (trackIds.length === 0) return []
+  const supabase = await createSupabaseServerClient()
+  const { data, error } = await supabase
+    .from('hooks')
+    .select('id, track_id, start_seconds, end_seconds, score, label')
+    .in('track_id', trackIds)
+    .order('score', { ascending: false })
+  if (error) {
+    console.error('Failed to load hooks:', error.message)
+    return []
+  }
+  return (data ?? []) as HookRow[]
+}
+
 export type ClipRow = {
   id: string
   artist_id: string

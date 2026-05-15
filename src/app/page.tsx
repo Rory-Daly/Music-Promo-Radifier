@@ -39,6 +39,12 @@ export default async function HomePage() {
           </div>
           <div className="flex items-center gap-4 text-xs">
             <Link
+              href="/compose"
+              className="rounded-md border border-neutral-800 px-3 py-1.5 font-medium text-neutral-200 transition hover:border-neutral-600 hover:text-white"
+            >
+              Compose
+            </Link>
+            <Link
               href="/vault"
               className="rounded-md border border-neutral-800 px-3 py-1.5 font-medium text-neutral-200 transition hover:border-neutral-600 hover:text-white"
             >
@@ -78,9 +84,13 @@ export default async function HomePage() {
           </div>
           {renders.length === 0 ? (
             <p className="text-sm text-neutral-400">
-              No reels yet. Run{' '}
-              <code className="text-neutral-100">npm run reel:auto -- --artistId=…</code> or trigger
-              one from the upcoming render API.
+              No reels yet. Open{' '}
+              <Link href="/compose" className="underline underline-offset-2 hover:text-neutral-100">
+                Compose
+              </Link>{' '}
+              to build one, or run{' '}
+              <code className="text-neutral-100">npm run reel:auto -- --artistId=…</code> from the
+              CLI.
             </p>
           ) : (
             <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -99,11 +109,18 @@ export default async function HomePage() {
           </h2>
           <ul className="space-y-2 text-sm text-neutral-300">
             <li>
-              Upload tracks and clips in the <Link href="/vault" className="underline underline-offset-2">vault</Link>{' '}— hooks auto-detect on upload.
+              Upload tracks and clips in the{' '}
+              <Link href="/vault" className="underline underline-offset-2">
+                vault
+              </Link>{' '}
+              — hooks auto-detect on upload.
             </li>
             <li>
-              <code className="text-neutral-100">POST /api/renders</code> queues renders from the
-              app instead of the CLI.
+              Build a reel in{' '}
+              <Link href="/compose" className="underline underline-offset-2">
+                compose
+              </Link>
+              : pick a track + hook + clips and queue a render.
             </li>
           </ul>
         </section>
