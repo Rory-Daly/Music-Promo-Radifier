@@ -1,28 +1,29 @@
 import 'server-only'
 import { spawn } from 'node:child_process'
-import { createWriteStream, mkdtempSync, rmSync } from 'node:fs'
+import { createWriteStream, mkdtempSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
-import { downloadDriveFile } from '@/lib/gdrive'
 
 /**
- * Pulls the first ~30 MB of a Drive file with a Range request and extracts
- * a JPEG thumbnail with ffmpeg. Returns null if either step fails — the
- * caller treats that as "no thumbnail" (clip still works for rendering;
- * just shows the "thumbnail unavailable" placeholder).
+ * Downloads up to HEAD_BYTES of a Drive file (via the API's Range support)
+ * and asks ffmpeg for the first decodable frame after FRAME_TIMESTAMP.
+ * Returns the JPEG bytes, scaled to <=320px wide.
  *
- * Why partial download: drone clips are often multi-GB; downloading the
- * full file just to grab a frame would dominate import time. The first
- * 30 MB is enough for any faststart MP4/MOV. Containers with metadata at
- * the tail (some non-faststart MP4, older MOV) will fail to decode from
- * the prefix — those clips fall back to the "thumbnail unavailable" UI.
+ * Returns null on any failure (caller treats as "no thumbnail" and falls
+ * back to Drive's lh3 URL / "thumbnail unavailable" placeholder).
  *
- * Returns the JPEG bytes scaled to 320px wide.
+ * The HEAD_BYTES window must be large enough to contain the moov atom for
+ * faststart MP4s — drone cameras and most editing software produce
+ * faststart output, where the atom lives near the start of the file. For
+ * non-faststart MP4/MOV the moov is at the tail of the file and no
+ * head-only download will decode; those clips currently fall back to the
+ * "thumbnail unavailable" UI.
  */
-const HEAD_BYTES = 30 * 1024 * 1024 // 30 MB
-const FRAME_TIMESTAMP = '00:00:01' // skip black/leader frames at the very start
+const HEAD_BYTES = 128 * 1024 * 1024 // 128 MB
+const FRAME_TIMESTAMP = '00:00:01'
+const FFMPEG_PROBE_BYTES = '100M'
 
 export async function extractDriveThumbnail(
   fileId: string,
@@ -31,44 +32,41 @@ export async function extractDriveThumbnail(
   const workDir = mkdtempSync(join(tmpdir(), 'legatograph-thumb-'))
   const tempInput = join(workDir, 'input.bin')
   try {
-    const { body } = await downloadDriveFile(fileId, apiKey)
-    const stream = Readable.fromWeb(body as never)
-    let bytes = 0
-    const writer = createWriteStream(tempInput)
-    const limited = new Readable({
-      read() {},
+    const url = `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&key=${apiKey}`
+    const res = await fetch(url, {
+      headers: { Range: `bytes=0-${HEAD_BYTES - 1}` },
     })
-    stream.on('data', (chunk: Buffer) => {
-      const remaining = HEAD_BYTES - bytes
-      if (remaining <= 0) {
-        stream.destroy()
-        limited.push(null)
-        return
-      }
-      const slice = chunk.length > remaining ? chunk.subarray(0, remaining) : chunk
-      bytes += slice.length
-      limited.push(slice)
-      if (bytes >= HEAD_BYTES) {
-        stream.destroy()
-        limited.push(null)
-      }
-    })
-    stream.on('end', () => limited.push(null))
-    stream.on('error', (err) => limited.destroy(err))
+    if (!res.ok && res.status !== 206) {
+      console.error(
+        `[thumbnail] Drive range fetch ${fileId} → HTTP ${res.status}: ${(await res.text().catch(() => '')).slice(0, 200)}`,
+      )
+      return null
+    }
+    if (!res.body) {
+      console.error(`[thumbnail] Drive range fetch ${fileId} → no body`)
+      return null
+    }
+    await pipeline(Readable.fromWeb(res.body as never), createWriteStream(tempInput))
 
-    await pipeline(limited, writer)
-    return await runFfmpeg(tempInput)
-  } catch {
+    const bytes = statSync(tempInput).size
+    return await runFfmpeg(tempInput, fileId, bytes)
+  } catch (err) {
+    console.error(
+      `[thumbnail] ${fileId} threw:`,
+      err instanceof Error ? err.message : String(err),
+    )
     return null
   } finally {
     rmSync(workDir, { recursive: true, force: true })
   }
 }
 
-function runFfmpeg(inputPath: string): Promise<Buffer | null> {
+function runFfmpeg(inputPath: string, fileId: string, bytes: number): Promise<Buffer | null> {
   return new Promise((resolve) => {
     const ff = spawn('ffmpeg', [
       '-y',
+      '-probesize', FFMPEG_PROBE_BYTES,
+      '-analyzeduration', FFMPEG_PROBE_BYTES,
       '-ss', FRAME_TIMESTAMP,
       '-i', inputPath,
       '-vframes', '1',
@@ -83,15 +81,17 @@ function runFfmpeg(inputPath: string): Promise<Buffer | null> {
     ff.stderr.on('data', (c: Buffer) => {
       stderr += c.toString()
     })
-    ff.on('error', () => resolve(null))
+    ff.on('error', (err) => {
+      console.error(`[thumbnail] ffmpeg ${fileId} spawn error:`, err.message)
+      resolve(null)
+    })
     ff.on('close', (code) => {
       if (code === 0 && chunks.length > 0) {
         resolve(Buffer.concat(chunks))
       } else {
-        // Caller doesn't need the stderr — just log via the silent fail path.
-        // (Uncomment for local debugging.)
-        // console.error('ffmpeg thumbnail failed:', stderr.slice(-300))
-        void stderr
+        console.error(
+          `[thumbnail] ffmpeg ${fileId} exit=${code} bytes=${bytes} stderr=${stderr.slice(-400).trim()}`,
+        )
         resolve(null)
       }
     })
