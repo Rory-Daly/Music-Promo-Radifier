@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useMemo, useState, useTransition, type FormEvent } from 'react'
 import { ClientDate } from '@/components/ClientDate'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
+import { uploadFileToStorage } from '@/lib/storage/browser-upload'
 import { cn } from '@/lib/utils'
 import type { ClipRow, TrackRow } from '@/lib/supabase/queries'
 
@@ -22,7 +23,7 @@ type Tab = 'tracks' | 'clips'
 
 type UploadState =
   | { kind: 'idle' }
-  | { kind: 'uploading'; filename: string }
+  | { kind: 'uploading'; filename: string; progressPct: number; stage: 'upload' | 'process' }
   | { kind: 'success'; message: string }
   | { kind: 'error'; message: string }
 
@@ -58,16 +59,17 @@ export function VaultClient({ artistId, initialTracks, initialClips }: Props) {
     const path = `${artistId}/${trackId}${ext}`
     const title = titleRaw.length > 0 ? titleRaw : file.name.replace(/\.[^.]+$/, '')
 
-    setUploadState({ kind: 'uploading', filename: file.name })
+    setUploadState({ kind: 'uploading', filename: file.name, progressPct: 0, stage: 'upload' })
     try {
-      const { error: uploadError } = await supabase.storage
-        .from('tracks')
-        .upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: false })
-      if (uploadError) {
-        setUploadState({ kind: 'error', message: `Upload failed: ${uploadError.message}` })
-        return
-      }
+      await uploadFileToStorage({
+        bucket: 'tracks',
+        path,
+        file,
+        onProgress: (pct) =>
+          setUploadState({ kind: 'uploading', filename: file.name, progressPct: pct, stage: 'upload' }),
+      })
 
+      setUploadState({ kind: 'uploading', filename: file.name, progressPct: 100, stage: 'process' })
       const res = await fetch('/api/vault/tracks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -87,6 +89,7 @@ export function VaultClient({ artistId, initialTracks, initialClips }: Props) {
       form.reset()
       startTransition(() => router.refresh())
     } catch (err) {
+      await supabase.storage.from('tracks').remove([path]).catch(() => {})
       setUploadState({
         kind: 'error',
         message: err instanceof Error ? err.message : 'Upload failed',
@@ -117,16 +120,17 @@ export function VaultClient({ artistId, initialTracks, initialClips }: Props) {
       .filter((t) => t.length > 0)
       .slice(0, 10)
 
-    setUploadState({ kind: 'uploading', filename: file.name })
+    setUploadState({ kind: 'uploading', filename: file.name, progressPct: 0, stage: 'upload' })
     try {
-      const { error: uploadError } = await supabase.storage
-        .from('clips')
-        .upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: false })
-      if (uploadError) {
-        setUploadState({ kind: 'error', message: `Upload failed: ${uploadError.message}` })
-        return
-      }
+      await uploadFileToStorage({
+        bucket: 'clips',
+        path,
+        file,
+        onProgress: (pct) =>
+          setUploadState({ kind: 'uploading', filename: file.name, progressPct: pct, stage: 'upload' }),
+      })
 
+      setUploadState({ kind: 'uploading', filename: file.name, progressPct: 100, stage: 'process' })
       const res = await fetch('/api/vault/clips', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -142,6 +146,7 @@ export function VaultClient({ artistId, initialTracks, initialClips }: Props) {
       form.reset()
       startTransition(() => router.refresh())
     } catch (err) {
+      await supabase.storage.from('clips').remove([path]).catch(() => {})
       setUploadState({
         kind: 'error',
         message: err instanceof Error ? err.message : 'Upload failed',
@@ -157,7 +162,11 @@ export function VaultClient({ artistId, initialTracks, initialClips }: Props) {
       </div>
 
       {uploadState.kind === 'uploading' ? (
-        <Banner tone="info">Uploading {uploadState.filename}…</Banner>
+        <UploadProgress
+          filename={uploadState.filename}
+          pct={uploadState.progressPct}
+          stage={uploadState.stage}
+        />
       ) : null}
       {uploadState.kind === 'success' ? <Banner tone="success">{uploadState.message}</Banner> : null}
       {uploadState.kind === 'error' ? <Banner tone="error">{uploadState.message}</Banner> : null}
@@ -275,6 +284,36 @@ function TabButton({
     >
       {label} <span className="text-xs text-neutral-500">({count})</span>
     </button>
+  )
+}
+
+function UploadProgress({
+  filename,
+  pct,
+  stage,
+}: {
+  filename: string
+  pct: number
+  stage: 'upload' | 'process'
+}) {
+  const label =
+    stage === 'process'
+      ? `Processing ${filename}…`
+      : `Uploading ${filename} (${Math.round(pct)}%)`
+  const indeterminate = stage === 'process'
+  return (
+    <div role="status" className="space-y-2 rounded-md border border-neutral-700 bg-neutral-900/60 px-3 py-2 text-sm text-neutral-200">
+      <p>{label}</p>
+      <div className="h-1.5 w-full overflow-hidden rounded bg-neutral-800">
+        <div
+          className={cn(
+            'h-full bg-neutral-100 transition-[width] duration-150',
+            indeterminate && 'animate-pulse',
+          )}
+          style={{ width: indeterminate ? '100%' : `${Math.max(0, Math.min(100, pct))}%` }}
+        />
+      </div>
+    </div>
   )
 }
 
