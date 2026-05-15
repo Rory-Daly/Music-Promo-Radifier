@@ -22,15 +22,13 @@ SUPABASE_SERVICE_ROLE_KEY=<the service role key shown on the page>
 - The **anon** key is safe to expose to the browser (it only allows what RLS allows).
 - The **service role** key bypasses RLS. **Never** ship it to the browser. We use it for server-side admin tasks like running migrations or background jobs.
 
-## 3. Run the initial migration
+## 3. Run the migrations
 
-The schema lives in `data/supabase/migrations/0001_init.sql`. Apply it via the SQL editor:
+Prefer the CLI (see [Migration workflow with the Supabase CLI](#migration-workflow-with-the-supabase-cli) below) — it tracks state, fails loudly on partial application, and avoids the silent-skip problems we hit early on. The SQL editor remains a useful fallback for diagnostics and one-off statements.
 
-1. Supabase dashboard → **SQL Editor → New query**.
-2. Paste the entire contents of `data/supabase/migrations/0001_init.sql`.
-3. Click **Run**. Should complete in a second or two.
+To apply manually via the SQL editor: open **SQL Editor → New query**, paste each file under `data/supabase/migrations/` in numeric order, run them one after another.
 
-This creates:
+The initial migration creates:
 
 - `users`, `artists`, `artist_memberships` (tenancy core)
 - `tracks`, `clips`, `hooks`, `renders`, `posts` (content tables)
@@ -38,7 +36,7 @@ This creates:
 - A trigger that mirrors `auth.users` rows into `public.users` on signup
 - `updated_at` triggers on mutable tables
 
-If you change the schema later, add `0002_*.sql` etc. and run them in order. We'll move to the Supabase CLI (`supabase db push`) once we set up a local dev workflow.
+Subsequent migrations add storage buckets (`0002`) and the security-definer artist-creation RPC (`0003`).
 
 ## 4. Configure Auth redirect URLs
 
@@ -64,14 +62,52 @@ Then open `http://localhost:3000`. You should be redirected to `/sign-in` (middl
 - **RLS denies everything** → make sure you're signed in. The middleware should redirect you to `/sign-in` if not, but server-rendered queries with no session get nothing.
 - **Trigger didn't create a `public.users` row** → re-run the migration; the trigger creation is idempotent. Or insert manually: `insert into public.users (id, email) select id, email from auth.users where id = auth.uid();`
 
-## Local dev shortcuts
+## Migration workflow with the Supabase CLI
 
-For now we connect directly to the hosted Supabase. When iteration becomes painful, install the Supabase CLI:
+The CLI is already installed as a devDependency. All commands assume you're at the repo root.
 
-```bash
-brew install supabase/tap/supabase
-supabase init
-supabase start    # runs Postgres + Auth in Docker
-```
+### One-time setup
 
-That's a v2 setup. For v1 we ship from the hosted instance.
+1. **Authenticate:**
+
+   ```bash
+   npx supabase login
+   ```
+
+2. **Link this checkout to your Supabase project.** Your project ref is the prefix before `.supabase.co` (find it in the [dashboard](https://supabase.com/dashboard) → project settings → "Reference ID"):
+
+   ```bash
+   npm run db:link -- --project-ref <your-ref>
+   ```
+
+   This writes a local pointer under `data/supabase/.temp/` (gitignored).
+
+3. **If you've already applied migrations manually via the SQL editor**, tell the CLI those versions are live so it doesn't re-run them:
+
+   ```bash
+   npm run db:repair -- --status applied 0001 0002 0003
+   ```
+
+   Skip this on a fresh project that has never had migrations applied.
+
+### Day-to-day
+
+| Action | Command |
+|---|---|
+| Apply pending migrations to the linked project | `npm run db:push` |
+| List which migrations are local vs. remote | `npm run db:status` |
+| Scaffold a new migration file | `npm run db:new <name>` |
+| Pull the live schema back into a local migration | `npm run db:pull` |
+| Run any other Supabase CLI command | `npm run db -- <args>` |
+
+### Auditing the live project
+
+If something feels off (RLS denies, missing bucket, table-not-found), paste [`data/supabase/diagnostics/audit.sql`](../data/supabase/diagnostics/audit.sql) into the [SQL editor](https://supabase.com/dashboard/project/_/sql) and run it. Each section emits a result set you can compare against the inline "Expected" comments. Common gaps:
+
+- Missing policies on `artists`, `artist_memberships` → re-apply the relevant `create policy` blocks from `0001_init.sql`.
+- Missing storage buckets → run `0002_storage_buckets.sql`, or create them in **Storage → New bucket** (tracks/clips private, renders public).
+- Missing `create_artist_with_owner` function → run `0003_create_artist_rpc.sql`.
+
+### Local Postgres stack (optional)
+
+`npm run db -- start` boots Postgres + Auth + Storage + Studio in Docker for offline development. Not required for the cloud flow; useful when you want to iterate on migrations without round-tripping to Supabase.

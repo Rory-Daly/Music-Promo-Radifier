@@ -1,0 +1,38 @@
+# Supabase CLI config for Legatograph.
+#
+# This repository keeps Supabase artefacts under `data/supabase/` rather than
+# the CLI's default `supabase/` (project convention — see CLAUDE.md). All CLI
+# commands therefore need `--workdir data`; the npm scripts in package.json
+# (`db:*`) already do this for you, so prefer those.
+#
+# project_id is required but its value is only used as a local label for the
+# `supabase start` dev stack. Pushes target the project chosen via
+# `supabase --workdir data link --project-ref <ref>`; the linked ref is
+# stored under `data/supabase/.temp/` (gitignored).
+
+project_id = "legatograph"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+shadow_port = 54320
+major_version = 17
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = ["http://localhost:3000/auth/callback"]
+
+[storage]
+enabled = true
+file_size_limit = "512MiB"

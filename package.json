@@ -17,7 +17,15 @@
     "size": "size-limit",
     "hooks:detect": "tsx scripts/detect-hooks.ts",
     "reel:compose": "tsx scripts/compose-reel.ts",
-    "reel:auto": "tsx scripts/reel-auto.ts"
+    "reel:auto": "tsx scripts/reel-auto.ts",
+    "db": "supabase --workdir data",
+    "db:link": "supabase --workdir data link",
+    "db:push": "supabase --workdir data db push",
+    "db:diff": "supabase --workdir data db diff",
+    "db:pull": "supabase --workdir data db pull",
+    "db:status": "supabase --workdir data migration list",
+    "db:new": "supabase --workdir data migration new",
+    "db:repair": "supabase --workdir data migration repair"
   },
   "dependencies": {
     "@remotion/bundler": "^4.0.460",
@@ -60,6 +68,7 @@
     "prettier": "^3.8.2",
     "prettier-plugin-tailwindcss": "^0.7.2",
     "size-limit": "^12.0.1",
+    "supabase": "^2.98.2",
     "tailwindcss": "^3.4.16",
     "tsx": "^4.21.0",
     "typescript": "^5.7.2",

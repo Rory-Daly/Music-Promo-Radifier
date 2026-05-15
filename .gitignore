@@ -48,3 +48,7 @@ coverage/
 Thumbs.db
 tracks/
 clips/
+
+# Supabase CLI local state (project link, temp seed cache, branch metadata)
+data/supabase/.branches/
+data/supabase/.temp/
