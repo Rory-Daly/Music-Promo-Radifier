@@ -11,9 +11,21 @@ import type { ClipRow, TrackRow } from '@/lib/supabase/queries'
 const ALLOWED_AUDIO_EXT = new Set(['.wav', '.mp3', '.flac', '.aiff', '.aif', '.m4a', '.ogg'])
 const ALLOWED_VIDEO_EXT = new Set(['.mp4', '.mov', '.m4v', '.webm', '.avi', '.mkv'])
 
+// Client-side caps. The same limits should be set on the storage bucket
+// (see migration 0004_bucket_size_limits.sql) so server enforcement matches.
+const MAX_TRACK_BYTES = 512 * 1024 * 1024 // 512 MB — generous for WAV masters
+const MAX_CLIP_BYTES = 2 * 1024 * 1024 * 1024 // 2 GB — transcode anything bigger
+
 function extOf(name: string): string {
   const m = name.match(/\.[^.]+$/)
   return (m ? m[0] : '').toLowerCase()
+}
+
+function formatBytes(n: number): string {
+  if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(1)} GB`
+  if (n >= 1024 ** 2) return `${(n / 1024 ** 2).toFixed(0)} MB`
+  if (n >= 1024) return `${(n / 1024).toFixed(0)} KB`
+  return `${n} B`
 }
 
 export type SignedTrackRow = TrackRow & { signedUrl: string | null }
@@ -53,6 +65,13 @@ export function VaultClient({ artistId, initialTracks, initialClips }: Props) {
     const ext = extOf(file.name)
     if (!ALLOWED_AUDIO_EXT.has(ext)) {
       setUploadState({ kind: 'error', message: `Unsupported audio format: ${ext || '(none)'}` })
+      return
+    }
+    if (file.size > MAX_TRACK_BYTES) {
+      setUploadState({
+        kind: 'error',
+        message: `Audio file is ${formatBytes(file.size)} — please bounce a smaller mixdown (cap is ${formatBytes(MAX_TRACK_BYTES)}).`,
+      })
       return
     }
     const trackId = crypto.randomUUID()
@@ -110,6 +129,13 @@ export function VaultClient({ artistId, initialTracks, initialClips }: Props) {
     const ext = extOf(file.name)
     if (!ALLOWED_VIDEO_EXT.has(ext)) {
       setUploadState({ kind: 'error', message: `Unsupported video format: ${ext || '(none)'}` })
+      return
+    }
+    if (file.size > MAX_CLIP_BYTES) {
+      setUploadState({
+        kind: 'error',
+        message: `Clip is ${formatBytes(file.size)} — transcode with ffmpeg to under ${formatBytes(MAX_CLIP_BYTES)} before uploading. See docs/supabase.md.`,
+      })
       return
     }
     const clipId = crypto.randomUUID()
