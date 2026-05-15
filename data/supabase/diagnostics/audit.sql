@@ -70,11 +70,13 @@ storage_policies as (
 ),
 rpc_grants as (
   -- grantee is sql_identifier (a domain over text); cast so array ops below resolve.
+  -- Skip 'postgres' — it owns the function and is always present regardless of grants.
   select grantee::text as grantee
   from information_schema.routine_privileges
   where routine_schema = 'public'
     and routine_name = 'create_artist_with_owner'
     and privilege_type = 'EXECUTE'
+    and grantee::text <> 'postgres'
 )
 
 select * from (
