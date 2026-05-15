@@ -141,6 +141,7 @@ export function VaultClient({ artistId, initialTracks, initialClips }: Props) {
         thumbnails?: number
         total?: number
         message?: string
+        thumbnailFailures?: Array<{ name: string; reason: string }>
       }>(res)
       if (!res.ok) {
         setUploadState({ kind: 'error', message: parsed.message })
@@ -150,14 +151,27 @@ export function VaultClient({ artistId, initialTracks, initialClips }: Props) {
       const imported = body.imported ?? 0
       const updated = body.updated ?? 0
       const thumbnails = body.thumbnails ?? 0
+      const failures = body.thumbnailFailures ?? []
       const parts: string[] = []
       if (imported > 0) parts.push(`imported ${imported}`)
       if (updated > 0) parts.push(`updated ${updated}`)
       if (thumbnails > 0)
         parts.push(`generated ${thumbnails} thumbnail${thumbnails === 1 ? '' : 's'}`)
-      const note =
+      if (failures.length > 0)
+        parts.push(`${failures.length} thumbnail failure${failures.length === 1 ? '' : 's'}`)
+      const summary =
         parts.length === 0 ? (body.message ?? 'Nothing changed.') : parts.join(', ') + '.'
-      setUploadState({ kind: 'success', message: note })
+      const message =
+        failures.length === 0
+          ? summary
+          : summary +
+            '\nFailures:\n' +
+            failures
+              .slice(0, 5)
+              .map((f) => `• ${f.name}: ${f.reason}`)
+              .join('\n') +
+            (failures.length > 5 ? `\n…and ${failures.length - 5} more.` : '')
+      setUploadState({ kind: failures.length > 0 ? 'error' : 'success', message })
       form.reset()
       startTransition(() => router.refresh())
     } catch (err) {
@@ -444,7 +458,13 @@ function Banner({
         ? 'border-red-700/60 bg-red-950/40 text-red-100'
         : 'border-neutral-700 bg-neutral-900/60 text-neutral-200'
   return (
-    <div role="status" className={cn('rounded-md border px-3 py-2 text-sm', styles)}>
+    <div
+      role="status"
+      className={cn(
+        'whitespace-pre-line rounded-md border px-3 py-2 text-sm leading-relaxed',
+        styles,
+      )}
+    >
       {children}
     </div>
   )

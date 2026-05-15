@@ -9,26 +9,29 @@ import { pipeline } from 'node:stream/promises'
 /**
  * Downloads up to HEAD_BYTES of a Drive file (via the API's Range support)
  * and asks ffmpeg for the first decodable frame after FRAME_TIMESTAMP.
- * Returns the JPEG bytes, scaled to <=320px wide.
- *
- * Returns null on any failure (caller treats as "no thumbnail" and falls
- * back to Drive's lh3 URL / "thumbnail unavailable" placeholder).
+ * Returns either { buffer } (success — JPEG bytes scaled to <=320px wide)
+ * or { error } (an attributable failure reason so callers can surface it
+ * in their response).
  *
  * The HEAD_BYTES window must be large enough to contain the moov atom for
  * faststart MP4s — drone cameras and most editing software produce
  * faststart output, where the atom lives near the start of the file. For
  * non-faststart MP4/MOV the moov is at the tail of the file and no
  * head-only download will decode; those clips currently fall back to the
- * "thumbnail unavailable" UI.
+ * "thumbnail unavailable" UI with a "moov atom not found" failure reason.
  */
 const HEAD_BYTES = 128 * 1024 * 1024 // 128 MB
 const FRAME_TIMESTAMP = '00:00:01'
 const FFMPEG_PROBE_BYTES = '100M'
 
+export type ThumbnailResult =
+  | { ok: true; buffer: Buffer; bytesRead: number }
+  | { ok: false; error: string }
+
 export async function extractDriveThumbnail(
   fileId: string,
   apiKey: string,
-): Promise<Buffer | null> {
+): Promise<ThumbnailResult> {
   const workDir = mkdtempSync(join(tmpdir(), 'legatograph-thumb-'))
   const tempInput = join(workDir, 'input.bin')
   try {
@@ -37,31 +40,27 @@ export async function extractDriveThumbnail(
       headers: { Range: `bytes=0-${HEAD_BYTES - 1}` },
     })
     if (!res.ok && res.status !== 206) {
-      console.error(
-        `[thumbnail] Drive range fetch ${fileId} → HTTP ${res.status}: ${(await res.text().catch(() => '')).slice(0, 200)}`,
-      )
-      return null
+      const body = (await res.text().catch(() => '')).slice(0, 200)
+      return { ok: false, error: `Drive HTTP ${res.status}${body ? ` — ${body}` : ''}` }
     }
     if (!res.body) {
-      console.error(`[thumbnail] Drive range fetch ${fileId} → no body`)
-      return null
+      return { ok: false, error: 'Drive returned no body' }
     }
     await pipeline(Readable.fromWeb(res.body as never), createWriteStream(tempInput))
 
     const bytes = statSync(tempInput).size
-    return await runFfmpeg(tempInput, fileId, bytes)
+    if (bytes === 0) {
+      return { ok: false, error: 'Empty body from Drive' }
+    }
+    return await runFfmpeg(tempInput, bytes)
   } catch (err) {
-    console.error(
-      `[thumbnail] ${fileId} threw:`,
-      err instanceof Error ? err.message : String(err),
-    )
-    return null
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
   } finally {
     rmSync(workDir, { recursive: true, force: true })
   }
 }
 
-function runFfmpeg(inputPath: string, fileId: string, bytes: number): Promise<Buffer | null> {
+function runFfmpeg(inputPath: string, bytes: number): Promise<ThumbnailResult> {
   return new Promise((resolve) => {
     const ff = spawn('ffmpeg', [
       '-y',
@@ -82,17 +81,17 @@ function runFfmpeg(inputPath: string, fileId: string, bytes: number): Promise<Bu
       stderr += c.toString()
     })
     ff.on('error', (err) => {
-      console.error(`[thumbnail] ffmpeg ${fileId} spawn error:`, err.message)
-      resolve(null)
+      resolve({ ok: false, error: `ffmpeg spawn failed: ${err.message}` })
     })
     ff.on('close', (code) => {
       if (code === 0 && chunks.length > 0) {
-        resolve(Buffer.concat(chunks))
+        resolve({ ok: true, buffer: Buffer.concat(chunks), bytesRead: bytes })
       } else {
-        console.error(
-          `[thumbnail] ffmpeg ${fileId} exit=${code} bytes=${bytes} stderr=${stderr.slice(-400).trim()}`,
-        )
-        resolve(null)
+        const tail = stderr.split('\n').filter((l) => l.trim()).slice(-3).join(' | ')
+        resolve({
+          ok: false,
+          error: `ffmpeg exit=${code} (${bytes} bytes downloaded) — ${tail.slice(-250)}`,
+        })
       }
     })
   })

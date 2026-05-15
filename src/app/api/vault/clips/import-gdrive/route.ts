@@ -134,16 +134,23 @@ async function handle(request: NextRequest) {
   // for a server-side concurrent operation.
   const admin = createSupabaseAdminClient()
   const thumbnailUrls = new Map<string, string>()
+  const failures: Array<{ name: string; reason: string }> = []
   let thumbnailsMade = 0
   await withConcurrency(work, THUMBNAIL_CONCURRENCY, async (w) => {
     if (!w.needsThumbnail) return
-    const buf = await extractDriveThumbnail(w.file.id, apiKey)
-    if (!buf) return
+    const result = await extractDriveThumbnail(w.file.id, apiKey)
+    if (!result.ok) {
+      failures.push({ name: w.file.name, reason: result.error })
+      return
+    }
     const path = `${artistId}/${w.clipId}.jpg`
     const { error: uploadError } = await admin.storage
       .from('thumbnails')
-      .upload(path, buf, { contentType: 'image/jpeg', upsert: true })
-    if (uploadError) return
+      .upload(path, result.buffer, { contentType: 'image/jpeg', upsert: true })
+    if (uploadError) {
+      failures.push({ name: w.file.name, reason: `Upload to thumbnails bucket failed: ${uploadError.message}` })
+      return
+    }
     const { data } = admin.storage.from('thumbnails').getPublicUrl(path)
     thumbnailUrls.set(w.file.id, data.publicUrl)
     thumbnailsMade++
@@ -193,6 +200,7 @@ async function handle(request: NextRequest) {
       updated,
       thumbnails: thumbnailsMade,
       total: files.length,
+      thumbnailFailures: failures,
     },
     { status: 201 },
   )
