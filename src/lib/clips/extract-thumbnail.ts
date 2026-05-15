@@ -126,8 +126,23 @@ async function downloadDriveForThumbnail(
 }
 
 async function driveHttpError(res: Response): Promise<string> {
-  const body = (await res.text().catch(() => '')).slice(0, 200)
-  return `Drive HTTP ${res.status}${body ? ` — ${body}` : ''}`
+  const body = await res.text().catch(() => '')
+  // Drive returns errors as { error: { code, message, errors: [...] } }.
+  // Pull the message out so the UI shows e.g. "Drive 403: The download
+  // quota for this file has been exceeded." rather than the raw JSON.
+  try {
+    const parsed = JSON.parse(body) as { error?: { message?: string } }
+    if (parsed.error?.message) {
+      let reason = `Drive ${res.status}: ${parsed.error.message}`
+      if (/download quota/i.test(parsed.error.message)) {
+        reason += ' (resets in ~24h, or sign in with Google for higher limits)'
+      }
+      return reason
+    }
+  } catch {
+    // Not JSON, fall through to the raw-body path.
+  }
+  return `Drive HTTP ${res.status}${body ? ` — ${body.slice(0, 200)}` : ''}`
 }
 
 function runFfmpeg(inputPath: string, bytesDownloaded: number): Promise<ThumbnailResult> {
