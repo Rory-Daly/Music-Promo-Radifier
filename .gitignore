@@ -46,8 +46,10 @@ coverage/
 # OS
 .DS_Store
 Thumbs.db
-tracks/
-clips/
+
+# Local content stash (root-only — never match nested route dirs)
+/tracks/
+/clips/
 
 # Supabase CLI local state (project link, temp seed cache, branch metadata)
 data/supabase/.branches/

@@ -42,13 +42,14 @@ export function VaultClient({ artistId, initialTracks, initialClips }: Props) {
     setUploadState({ kind: 'uploading', filename: file.name })
     try {
       const res = await fetch('/api/vault/tracks', { method: 'POST', body: data })
-      const json = (await res.json()) as { error?: string; hookCount?: number; title?: string }
+      const parsed = await safeParseResponse<{ error?: string; hookCount?: number; title?: string }>(res)
       if (!res.ok) {
-        setUploadState({ kind: 'error', message: json.error ?? `Upload failed (${res.status})` })
+        setUploadState({ kind: 'error', message: parsed.message })
         return
       }
-      const note = json.hookCount ? ` (${json.hookCount} hook${json.hookCount === 1 ? '' : 's'} detected)` : ''
-      setUploadState({ kind: 'success', message: `Uploaded ${json.title ?? 'track'}${note}` })
+      const body = parsed.body ?? {}
+      const note = body.hookCount ? ` (${body.hookCount} hook${body.hookCount === 1 ? '' : 's'} detected)` : ''
+      setUploadState({ kind: 'success', message: `Uploaded ${body.title ?? 'track'}${note}` })
       form.reset()
       startTransition(() => router.refresh())
     } catch (err) {
@@ -72,12 +73,13 @@ export function VaultClient({ artistId, initialTracks, initialClips }: Props) {
     setUploadState({ kind: 'uploading', filename: file.name })
     try {
       const res = await fetch('/api/vault/clips', { method: 'POST', body: data })
-      const json = (await res.json()) as { error?: string; fileName?: string }
+      const parsed = await safeParseResponse<{ error?: string; fileName?: string }>(res)
       if (!res.ok) {
-        setUploadState({ kind: 'error', message: json.error ?? `Upload failed (${res.status})` })
+        setUploadState({ kind: 'error', message: parsed.message })
         return
       }
-      setUploadState({ kind: 'success', message: `Uploaded ${json.fileName ?? 'clip'}` })
+      const body = parsed.body ?? {}
+      setUploadState({ kind: 'success', message: `Uploaded ${body.fileName ?? 'clip'}` })
       form.reset()
       startTransition(() => router.refresh())
     } catch (err) {
@@ -309,6 +311,28 @@ function ClipList({ clips }: { clips: SignedClipRow[] }) {
       ))}
     </ul>
   )
+}
+
+async function safeParseResponse<T extends { error?: string }>(
+  res: Response,
+): Promise<{ body: T | null; message: string }> {
+  const text = await res.text().catch(() => '')
+  if (!text) {
+    const reason =
+      res.status === 0
+        ? 'Connection closed before response (network or proxy issue)'
+        : res.status === 413
+          ? 'File too large for the upload endpoint (413 Payload Too Large)'
+          : `Empty response from server (status ${res.status})`
+    return { body: null, message: reason }
+  }
+  try {
+    const body = JSON.parse(text) as T
+    const message = body.error ?? `Request failed (${res.status})`
+    return { body, message }
+  } catch {
+    return { body: null, message: `Non-JSON response (status ${res.status}): ${text.slice(0, 200)}` }
+  }
 }
 
 function formatSeconds(seconds: number): string {
