@@ -14,7 +14,49 @@ Legatograph can import drone clips directly from Google Drive instead of uploadi
 
 Drive is the right default for source clips. Tracks (your audio masters) still upload to Supabase Storage because they're much smaller and used by the hook detector immediately.
 
-## One-time setup
+## Two auth modes
+
+| | OAuth (recommended) | API key |
+|---|---|---|
+| Auth | "Sign in with Google" once per artist | None — uses a server-side API key |
+| Folder visibility | Can read **private** folders the user has access to | Folder must be **publicly shared** ("Anyone with the link") |
+| Per-file quota | Effectively unlimited (per-user) | Google's anonymous quota: roughly 100 MB / file / day, often less for popular folders |
+| Best for | Production use; iterating on the same folder repeatedly | One-off public-folder imports without sign-in friction |
+
+The app supports both. If both are configured, OAuth takes precedence per-artist (once that artist connects); API key is the fallback. Configure both for the safest setup, OAuth alone is fine if you don't want anonymous fallback.
+
+## One-time setup (OAuth — recommended)
+
+### 1. Create OAuth credentials
+
+1. Open the [Google Cloud Console → APIs & Services → Credentials](https://console.cloud.google.com/apis/credentials).
+2. **Create Credentials → OAuth client ID**. If asked, configure the OAuth consent screen first:
+   - User type: **External** (for personal Google accounts) or **Internal** (Workspace).
+   - App name: Legatograph. Support email: yours.
+   - Scopes: add `https://www.googleapis.com/auth/drive.readonly`.
+   - Test users: add your own Google account email if the app is in **Testing** mode.
+3. Back at **Create OAuth client ID**: type **Web application**.
+4. Authorized redirect URIs: add `http://localhost:3000/api/integrations/google/callback`. For production, also add your deployed URL with the same path.
+5. **Create** → copy the **Client ID** and **Client secret**.
+
+### 2. Add credentials to `.env.local`
+
+```bash
+GOOGLE_OAUTH_CLIENT_ID=...apps.googleusercontent.com
+GOOGLE_OAUTH_CLIENT_SECRET=...
+```
+
+Restart `npm run dev` so the new env vars are picked up.
+
+### 3. Connect Google Drive in the vault
+
+1. Open [http://localhost:3000/vault](http://localhost:3000/vault) → **Clips** tab.
+2. Click **Connect Google Drive**. You'll redirect to Google's consent screen, grant Drive read access, then redirect back.
+3. The banner should say "Google Drive connected". You can now import private folders (no public sharing required) and won't hit the per-file anonymous quotas.
+
+To disconnect: click **Disconnect** next to the Google Drive status. This revokes the token on Google's side and deletes it from our database.
+
+## One-time setup (API key — fallback / public folders only)
 
 ### 1. Get a Google API key
 
@@ -71,19 +113,20 @@ Each render incurs one Drive download per clip. A typical reel uses 4–6 clips;
 
 ## Troubleshooting
 
-**"Drive folder lookup failed: HTTP 403"** — the folder isn't shared "Anyone with the link". Re-share it.
+**"The download quota for this file has been exceeded"** — Google's per-file anonymous quota (resets every ~24 h). This only affects the API-key path. Connecting Google Drive via OAuth in the vault eliminates the quota entirely — the download counts against your per-user quota, which is effectively unlimited.
 
-**"Drive folder lookup failed: HTTP 404"** — the folder ID is wrong, or the folder was deleted/moved out of the shared scope.
+**"Drive folder lookup failed: HTTP 403"** — the folder isn't accessible to whichever auth is in play. For API key: share the folder as "Anyone with the link". For OAuth: make sure the signed-in user has at least Viewer access to the folder.
 
-**"No video files found in that folder"** — files exist but Drive's `mimeType` doesn't start with `video/`. Check Drive thinks they're videos (sometimes raw `.mov` files end up tagged as `application/octet-stream`).
+**"Drive folder lookup failed: HTTP 404"** — the folder ID is wrong, or it was deleted / moved out of the user's scope.
 
-**Renders fail with "GOOGLE_API_KEY not set — cannot resolve Drive clip"** — the env var is missing from the server's environment. On Vercel, add it under **Settings → Environment Variables** for the appropriate environment and redeploy.
+**"No video files found in that folder"** — files exist but Drive's `mimeType` doesn't start with `video/`. Check Drive thinks they're videos (raw `.mov` files sometimes end up tagged as `application/octet-stream`).
 
-**API quota errors during a big import** — the default Drive API quota (10k requests / 100s / user) is more than enough for normal use; if you hit it, paste an audit script from [docs/supabase.md](supabase.md) to verify only your project is using the key.
+**"No Drive auth configured"** — neither OAuth nor `GOOGLE_API_KEY` is set up. Either connect Drive in the vault or set the env var. See setup sections above.
+
+**OAuth: "Google did not return a refresh token"** — the user previously approved the app, so Google skips refresh-token issuance. Fix: visit [Google Account → Security → Apps with access](https://myaccount.google.com/permissions), remove "Legatograph", and reconnect from the vault.
 
 ## What's NOT supported (yet)
 
-- **OAuth flow** — currently the folder must be publicly shared. A future enhancement: sign in with Google so private folders work and multi-user setups are properly isolated.
 - **Per-file imports** — only folder imports right now. Easy to add if needed (the helper exposes `getFileMetadata` and `extractFileId`).
 - **Watch / sync** — imports are one-shot. Add a clip to Drive, you need to re-run the import to pick it up. A scheduled `db:push` could sync nightly if that becomes painful.
 - **Tracks (audio) from Drive** — only clips. Tracks are usually under 100 MB so the upload-to-Supabase path is fine; the hook detector reads them immediately and we need them in our control plane.

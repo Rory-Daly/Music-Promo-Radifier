@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto'
 import { NextResponse, type NextRequest } from 'next/server'
 import { z } from 'zod'
 import { extractDriveThumbnail } from '@/lib/clips/extract-thumbnail'
-import { extractFolderId, listFolderVideos, type DriveFile } from '@/lib/gdrive'
+import { extractFolderId, listFolderVideos, type DriveAuth, type DriveFile } from '@/lib/gdrive'
+import { getDriveAccessToken } from '@/lib/oauth/drive-tokens'
 import { createSupabaseAdminClient } from '@/lib/supabase/admin'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 
@@ -32,11 +33,6 @@ export async function POST(request: NextRequest) {
 type ExistingRow = { id: string; gdrive_file_id: string | null; thumbnail_url: string | null }
 
 async function handle(request: NextRequest) {
-  const apiKey = process.env.GOOGLE_API_KEY
-  if (!apiKey) {
-    return err('GOOGLE_API_KEY is not set on the server. See docs/gdrive.md.', 500, 'missing_env')
-  }
-
   const supabase = await createSupabaseServerClient()
   const {
     data: { user },
@@ -68,9 +64,18 @@ async function handle(request: NextRequest) {
     .maybeSingle()
   if (!membership) return err('Not a member of this artist', 403, 'forbidden')
 
+  const auth = await resolveDriveAuth(artistId)
+  if (!auth) {
+    return err(
+      'No Drive auth configured. Connect Google Drive from the vault, or set GOOGLE_API_KEY on the server. See docs/gdrive.md.',
+      500,
+      'no_auth',
+    )
+  }
+
   let files: DriveFile[]
   try {
-    files = await listFolderVideos(folderId, apiKey)
+    files = await listFolderVideos(folderId, auth)
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)
     return err(`Drive folder lookup failed: ${message}`, 502, 'drive_failed')
@@ -138,7 +143,7 @@ async function handle(request: NextRequest) {
   let thumbnailsMade = 0
   await withConcurrency(work, THUMBNAIL_CONCURRENCY, async (w) => {
     if (!w.needsThumbnail) return
-    const result = await extractDriveThumbnail(w.file.id, apiKey, w.file.size)
+    const result = await extractDriveThumbnail(w.file.id, auth, w.file.size)
     if (!result.ok) {
       failures.push({ name: w.file.name, reason: result.error })
       return
@@ -204,6 +209,14 @@ async function handle(request: NextRequest) {
     },
     { status: 201 },
   )
+}
+
+async function resolveDriveAuth(artistId: string): Promise<DriveAuth | null> {
+  const accessToken = await getDriveAccessToken(artistId)
+  if (accessToken) return { kind: 'oauth', accessToken }
+  const apiKey = process.env.GOOGLE_API_KEY
+  if (apiKey) return { kind: 'apiKey', apiKey }
+  return null
 }
 
 async function withConcurrency<T>(

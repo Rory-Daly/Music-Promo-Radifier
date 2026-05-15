@@ -1,5 +1,7 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { isDriveConnected } from '@/lib/oauth/drive-tokens'
+import { readOAuthClientFromEnv } from '@/lib/oauth/google'
 import {
   ensureFirstArtist,
   getCurrentUserAndArtists,
@@ -54,6 +56,11 @@ export default async function VaultPage() {
   const tracksWithUrls = tracks.map((t, i) => ({ ...t, signedUrl: trackSignedUrls[i] }))
   const clipsWithUrls = clips.map((c, i) => ({ ...c, signedUrl: clipSignedUrls[i] }))
 
+  const driveOauthAvailable = readOAuthClientFromEnv() !== null
+  const driveConnected = driveOauthAvailable
+    ? await isDriveConnected(activeMembership.artist_id)
+    : false
+
   return (
     <main className="min-h-screen bg-neutral-950 px-8 py-10 text-neutral-100">
       <div className="mx-auto max-w-5xl space-y-8">
@@ -84,6 +91,8 @@ export default async function VaultPage() {
           artistId={activeMembership.artist_id}
           initialTracks={tracksWithUrls}
           initialClips={clipsWithUrls}
+          driveOauthAvailable={driveOauthAvailable}
+          driveConnected={driveConnected}
         />
       </div>
     </main>

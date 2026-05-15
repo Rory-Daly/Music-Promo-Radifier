@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync, statSync } from 'node:fs'
 import { open } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { buildDriveDownloadRequest, type DriveAuth } from '@/lib/gdrive'
 
 /**
  * Downloads enough of a Drive file to extract a thumbnail with ffmpeg.
@@ -17,21 +18,16 @@ import { join } from 'node:path'
  * any frame lives in the mdat stream, so a head-only download fails on
  * camera-original files with "Invalid data found when processing input".
  *
- * The fix: fetch the first 50 MB (covers ftyp + first ~5 seconds of
- * mdat at typical 4K bitrates) AND the last 16 MB (covers moov), write
- * them to a single sparse file at their correct byte offsets, and let
- * ffmpeg seek between them. The middle is filesystem-zero; ffmpeg never
- * needs to read it because it only wants the first frame's bytes, which
- * are in the head.
- *
- * For files smaller than HEAD_BYTES + TAIL_BYTES (~66 MB), just download
- * the whole thing in one Range request.
+ * The fix: fetch the first 50 MB (covers ftyp + first ~5 s of mdat at
+ * 4K bitrates) AND the last 16 MB (covers moov), write them to a single
+ * sparse file at their correct byte offsets, and let ffmpeg seek between
+ * them. The middle is filesystem-zero; ffmpeg never needs to read it
+ * because it only wants the first frame's bytes, which are in the head.
  */
-const HEAD_BYTES = 50 * 1024 * 1024 // 50 MB — ftyp + several seconds of mdat
-const TAIL_BYTES = 16 * 1024 * 1024 // 16 MB — almost always covers the moov atom
+const HEAD_BYTES = 50 * 1024 * 1024
+const TAIL_BYTES = 16 * 1024 * 1024
 const FRAME_TIMESTAMP = '00:00:01'
 const FFMPEG_PROBE_BYTES = '100M'
-const ENDPOINT = 'https://www.googleapis.com/drive/v3'
 
 export type ThumbnailResult =
   | { ok: true; buffer: Buffer; bytesDownloaded: number }
@@ -39,7 +35,7 @@ export type ThumbnailResult =
 
 export async function extractDriveThumbnail(
   fileId: string,
-  apiKey: string,
+  auth: DriveAuth,
   fileSize: number,
 ): Promise<ThumbnailResult> {
   const workDir = mkdtempSync(join(tmpdir(), 'legatograph-thumb-'))
@@ -47,7 +43,7 @@ export async function extractDriveThumbnail(
   try {
     const bytesDownloaded = await downloadDriveForThumbnail(
       fileId,
-      apiKey,
+      auth,
       fileSize,
       tempInput,
     )
@@ -65,17 +61,17 @@ export async function extractDriveThumbnail(
 
 async function downloadDriveForThumbnail(
   fileId: string,
-  apiKey: string,
+  auth: DriveAuth,
   fileSize: number,
   tempPath: string,
 ): Promise<number> {
-  const url = `${ENDPOINT}/files/${fileId}?alt=media&key=${apiKey}`
+  const { url, headers: authHeaders } = buildDriveDownloadRequest(fileId, auth)
 
-  // Small file or unknown size: one Range request for the whole thing
-  // (or up to HEAD_BYTES if size is unknown).
   if (fileSize === 0 || fileSize <= HEAD_BYTES + TAIL_BYTES) {
     const end = fileSize > 0 ? fileSize - 1 : HEAD_BYTES - 1
-    const res = await fetch(url, { headers: { Range: `bytes=0-${end}` } })
+    const res = await fetch(url, {
+      headers: { ...authHeaders, Range: `bytes=0-${end}` },
+    })
     if (!res.ok && res.status !== 206) {
       throw new Error(await driveHttpError(res))
     }
@@ -89,12 +85,10 @@ async function downloadDriveForThumbnail(
     return buf.length
   }
 
-  // Large file: head + tail with a sparse middle.
   const fd = await open(tempPath, 'w')
   try {
-    // Head
     const headRes = await fetch(url, {
-      headers: { Range: `bytes=0-${HEAD_BYTES - 1}` },
+      headers: { ...authHeaders, Range: `bytes=0-${HEAD_BYTES - 1}` },
     })
     if (!headRes.ok && headRes.status !== 206) {
       throw new Error('Head: ' + (await driveHttpError(headRes)))
@@ -102,10 +96,9 @@ async function downloadDriveForThumbnail(
     const headBuf = Buffer.from(await headRes.arrayBuffer())
     await fd.write(headBuf, 0, headBuf.length, 0)
 
-    // Tail
     const tailStart = fileSize - TAIL_BYTES
     const tailRes = await fetch(url, {
-      headers: { Range: `bytes=${tailStart}-${fileSize - 1}` },
+      headers: { ...authHeaders, Range: `bytes=${tailStart}-${fileSize - 1}` },
     })
     if (!tailRes.ok && tailRes.status !== 206) {
       throw new Error('Tail: ' + (await driveHttpError(tailRes)))
@@ -113,10 +106,6 @@ async function downloadDriveForThumbnail(
     const tailBuf = Buffer.from(await tailRes.arrayBuffer())
     await fd.write(tailBuf, 0, tailBuf.length, tailStart)
 
-    // Make the file's metadata report the full size so ffmpeg's MP4
-    // demuxer interprets moov offsets correctly. The gap in the middle
-    // is a sparse hole — reading it yields zero bytes, but ffmpeg never
-    // needs to because the first-frame data lives in the head we wrote.
     await fd.truncate(fileSize)
 
     return headBuf.length + tailBuf.length
@@ -127,9 +116,6 @@ async function downloadDriveForThumbnail(
 
 async function driveHttpError(res: Response): Promise<string> {
   const body = await res.text().catch(() => '')
-  // Drive returns errors as { error: { code, message, errors: [...] } }.
-  // Pull the message out so the UI shows e.g. "Drive 403: The download
-  // quota for this file has been exceeded." rather than the raw JSON.
   try {
     const parsed = JSON.parse(body) as { error?: { message?: string } }
     if (parsed.error?.message) {
@@ -140,7 +126,7 @@ async function driveHttpError(res: Response): Promise<string> {
       return reason
     }
   } catch {
-    // Not JSON, fall through to the raw-body path.
+    // not JSON
   }
   return `Drive HTTP ${res.status}${body ? ` — ${body.slice(0, 200)}` : ''}`
 }

@@ -1,7 +1,9 @@
 import { after, NextResponse, type NextRequest } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase/admin'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
+import { getDriveAccessToken } from '@/lib/oauth/drive-tokens'
 import { runRender, type ClipRef } from '@/lib/render/engine'
+import type { DriveAuth } from '@/lib/gdrive'
 import { parseStoragePath, renderRequestSchema } from '@/lib/render/request'
 
 export const runtime = 'nodejs'
@@ -113,6 +115,21 @@ export async function POST(request: NextRequest) {
     return err('Failed to queue render', 500, 'insert_failed')
   }
 
+  // Resolve Drive auth eagerly (sync, while user request is in flight). If
+  // any of the selected clips are from Drive, the render needs to download
+  // them — prefer the artist's OAuth access token, fall back to API key,
+  // tolerate neither (engine will fail loudly during download).
+  const hasGdriveClip = clipRefs.some((c) => c.source === 'gdrive')
+  let driveAuth: DriveAuth | null = null
+  if (hasGdriveClip) {
+    const oauthToken = await getDriveAccessToken(input.artistId)
+    if (oauthToken) {
+      driveAuth = { kind: 'oauth', accessToken: oauthToken }
+    } else if (process.env.GOOGLE_API_KEY) {
+      driveAuth = { kind: 'apiKey', apiKey: process.env.GOOGLE_API_KEY }
+    }
+  }
+
   const adminClient = createSupabaseAdminClient()
   after(async () => {
     try {
@@ -129,6 +146,7 @@ export async function POST(request: NextRequest) {
         artistName: input.artistName,
         slowmo: input.slowmo,
         noOverlays: input.noOverlays,
+        driveAuth,
       })
     } catch (e) {
       console.error('render failed:', e instanceof Error ? e.message : String(e))

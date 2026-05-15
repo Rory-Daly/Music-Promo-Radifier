@@ -1,7 +1,7 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
-import { useMemo, useState, useTransition, type FormEvent } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { useEffect, useMemo, useState, useTransition, type FormEvent } from 'react'
 import { ClientDate } from '@/components/ClientDate'
 import { ClipPreview } from '@/components/ClipPreview'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
@@ -45,14 +45,44 @@ type Props = {
   artistId: string
   initialTracks: SignedTrackRow[]
   initialClips: SignedClipRow[]
+  driveOauthAvailable: boolean
+  driveConnected: boolean
 }
 
-export function VaultClient({ artistId, initialTracks, initialClips }: Props) {
-  const [tab, setTab] = useState<Tab>('tracks')
+export function VaultClient({
+  artistId,
+  initialTracks,
+  initialClips,
+  driveOauthAvailable,
+  driveConnected,
+}: Props) {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const driveStatus = searchParams.get('drive')
+  const driveMsg = searchParams.get('msg')
+
+  const [tab, setTab] = useState<Tab>(driveStatus ? 'clips' : 'tracks')
+  const [uploadState, setUploadState] = useState<UploadState>(() => {
+    if (driveStatus === 'success') {
+      return { kind: 'success', message: 'Google Drive connected.' }
+    }
+    if (driveStatus === 'error') {
+      return {
+        kind: 'error',
+        message: `Google Drive connection failed: ${driveMsg ?? 'unknown error'}`,
+      }
+    }
+    return { kind: 'idle' }
+  })
   const [, startTransition] = useTransition()
-  const [uploadState, setUploadState] = useState<UploadState>({ kind: 'idle' })
   const supabase = useMemo(() => createSupabaseBrowserClient(), [])
+
+  // Clear the OAuth status params from the address bar after first render so
+  // a manual refresh doesn't re-trigger the banner. No setState involved —
+  // banner state is already initialised from the URL above.
+  useEffect(() => {
+    if (driveStatus) router.replace('/vault')
+  }, [driveStatus, router])
 
   async function uploadTrack(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -309,6 +339,13 @@ export function VaultClient({ artistId, initialTracks, initialClips }: Props) {
         </section>
       ) : (
         <section className="space-y-6" role="tabpanel" aria-label="Clips">
+          <DriveConnection
+            artistId={artistId}
+            driveOauthAvailable={driveOauthAvailable}
+            driveConnected={driveConnected}
+            onDisconnect={() => startTransition(() => router.refresh())}
+          />
+
           <form
             onSubmit={importGdriveFolder}
             className="space-y-3 rounded-md border border-neutral-800 bg-neutral-900/40 p-4"
@@ -536,6 +573,78 @@ function ClipList({ clips }: { clips: SignedClipRow[] }) {
         </li>
       ))}
     </ul>
+  )
+}
+
+function DriveConnection({
+  artistId,
+  driveOauthAvailable,
+  driveConnected,
+  onDisconnect,
+}: {
+  artistId: string
+  driveOauthAvailable: boolean
+  driveConnected: boolean
+  onDisconnect: () => void
+}) {
+  const [busy, setBusy] = useState(false)
+  if (!driveOauthAvailable) {
+    return (
+      <div className="rounded-md border border-neutral-800 bg-neutral-900/40 px-4 py-3 text-xs text-neutral-400">
+        Sign-in with Google not configured. Set <code className="text-neutral-200">GOOGLE_OAUTH_CLIENT_ID</code> /{' '}
+        <code className="text-neutral-200">GOOGLE_OAUTH_CLIENT_SECRET</code> to allow private folders and bypass anonymous quotas.
+      </div>
+    )
+  }
+  if (!driveConnected) {
+    return (
+      <div className="flex items-center justify-between gap-3 rounded-md border border-neutral-700 bg-neutral-900/60 px-4 py-3 text-sm">
+        <div>
+          <p className="text-neutral-100">Google Drive — not connected</p>
+          <p className="mt-0.5 text-xs text-neutral-500">
+            Sign in once to import private folders and bypass per-file download quotas.
+          </p>
+        </div>
+        <a
+          href={`/api/integrations/google/start?artistId=${encodeURIComponent(artistId)}`}
+          className="rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-950 hover:bg-white"
+        >
+          Connect Google Drive
+        </a>
+      </div>
+    )
+  }
+  async function disconnect() {
+    if (busy) return
+    setBusy(true)
+    try {
+      await fetch('/api/integrations/google/disconnect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ artistId }),
+      })
+      onDisconnect()
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md border border-emerald-700/60 bg-emerald-950/30 px-4 py-3 text-sm">
+      <div>
+        <p className="text-emerald-100">Google Drive — connected</p>
+        <p className="mt-0.5 text-xs text-emerald-300/80">
+          Imports and renders will use your account; per-file anonymous quotas don&apos;t apply.
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={disconnect}
+        disabled={busy}
+        className="text-xs font-medium text-emerald-200 underline-offset-4 hover:text-emerald-50 hover:underline disabled:opacity-50"
+      >
+        Disconnect
+      </button>
+    </div>
   )
 }
 

@@ -7,7 +7,7 @@ import { pipeline } from 'node:stream/promises'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { composeReel } from '../../../scripts/lib/compose'
 import { markRenderStatus, uploadRenderOutput } from '../../../scripts/lib/persist-render'
-import { downloadDriveFile } from '@/lib/gdrive'
+import { downloadDriveFile, type DriveAuth } from '@/lib/gdrive'
 
 export type ClipRef =
   | { source: 'supabase'; bucket: string; path: string }
@@ -27,6 +27,7 @@ export type RunRenderInput = {
   slowmo?: number
   noOverlays?: boolean
   wordmarkPath?: string
+  driveAuth?: DriveAuth | null
 }
 
 /**
@@ -64,7 +65,12 @@ export async function runRender(client: SupabaseClient, input: RunRenderInput): 
               workDir,
               `clip-${i}`,
             )
-          : await downloadDriveObjectToFile(clip.fileId, workDir, `clip-${i}`)
+          : await downloadDriveObjectToFile(
+              clip.fileId,
+              workDir,
+              `clip-${i}`,
+              input.driveAuth ?? null,
+            )
       clipLocalPaths.push(path)
     }
 
@@ -127,11 +133,21 @@ async function downloadDriveObjectToFile(
   fileId: string,
   workDir: string,
   baseName: string,
+  preferredAuth: DriveAuth | null,
 ): Promise<string> {
-  const apiKey = process.env.GOOGLE_API_KEY
-  if (!apiKey) throw new Error('GOOGLE_API_KEY not set — cannot resolve Drive clip')
-  const { body } = await downloadDriveFile(fileId, apiKey)
+  const auth = preferredAuth ?? readApiKeyAuthFromEnv()
+  if (!auth) {
+    throw new Error(
+      'No Drive auth available — set GOOGLE_API_KEY or connect the artist via OAuth',
+    )
+  }
+  const { body } = await downloadDriveFile(fileId, auth)
   const localPath = join(workDir, `${baseName}.mp4`)
   await pipeline(Readable.fromWeb(body as never), createWriteStream(localPath))
   return localPath
+}
+
+function readApiKeyAuthFromEnv(): DriveAuth | null {
+  const key = process.env.GOOGLE_API_KEY
+  return key ? { kind: 'apiKey', apiKey: key } : null
 }
