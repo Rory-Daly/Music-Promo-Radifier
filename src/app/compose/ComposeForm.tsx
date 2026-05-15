@@ -243,13 +243,21 @@ export function ComposeForm({ artistId, tracks, hooks, clips }: Props) {
                         </span>
                       ) : null}
                     </div>
-                    <div className="flex items-center justify-between gap-1 px-2 py-1 text-[10px]">
-                      <span className="font-mono uppercase tracking-[0.2em] text-neutral-500">
-                        {clip.duration_seconds ? `${clip.duration_seconds.toFixed(1)}s` : '—'}
-                      </span>
-                      {checked ? (
-                        <span className="text-neutral-100">selected</span>
-                      ) : null}
+                    <div className="space-y-0.5 px-2 py-1">
+                      <p
+                        className="truncate text-[11px] text-neutral-200"
+                        title={clip.name ?? undefined}
+                      >
+                        {clip.name ?? '(unnamed)'}
+                      </p>
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="font-mono uppercase tracking-[0.2em] text-neutral-500">
+                          {clip.duration_seconds ? `${clip.duration_seconds.toFixed(1)}s` : '—'}
+                        </span>
+                        {checked ? (
+                          <span className="text-neutral-100">selected</span>
+                        ) : null}
+                      </div>
                     </div>
                   </button>
                 </li>

@@ -8,6 +8,7 @@ const bodySchema = z.object({
   artistId: z.string().uuid(),
   clipId: z.string().uuid(),
   path: z.string().min(1).max(512),
+  name: z.string().trim().min(1).max(200),
   tags: z.array(z.string().trim().min(1).max(40)).max(10).optional(),
 })
 
@@ -41,7 +42,7 @@ async function handle(request: NextRequest) {
   if (!parsed.success) {
     return err(parsed.error.issues[0]?.message ?? 'Invalid body', 400, 'invalid_body')
   }
-  const { artistId, clipId, path, tags } = parsed.data
+  const { artistId, clipId, path, name, tags } = parsed.data
 
   const { data: membership } = await supabase
     .from('artist_memberships')
@@ -66,6 +67,7 @@ async function handle(request: NextRequest) {
       artist_id: artistId,
       source: 'upload',
       storage_url: `clips/${path}`,
+      name,
       tags: tags ?? [],
     })
     .select('id')

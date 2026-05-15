@@ -36,14 +36,18 @@ export function ClipPreview({ clip }: { clip: ClipRow & { signedUrl?: string | n
     )
   }
 
-  const driveSrc =
+  // Prefer the thumbnail we generated and stored in our own bucket (set by
+  // the Drive import endpoint). Only fall back to Drive's public thumbnail
+  // URL if we don't have one — e.g. legacy rows imported before server-
+  // side thumbnail generation existed.
+  const driveFallback =
     clip.source === 'gdrive' && clip.gdrive_file_id
       ? `https://lh3.googleusercontent.com/d/${clip.gdrive_file_id}=w320`
       : null
-  const src = driveSrc ?? clip.thumbnail_url
+  const src = clip.thumbnail_url ?? driveFallback
 
   if (src && !imgFailed) {
-    // eslint-disable-next-line @next/next/no-img-element
+     
     return (
       <img
         src={src}

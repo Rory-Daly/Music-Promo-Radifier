@@ -207,7 +207,7 @@ export function VaultClient({ artistId, initialTracks, initialClips }: Props) {
       const res = await fetch('/api/vault/clips', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ artistId, clipId, path, tags }),
+        body: JSON.stringify({ artistId, clipId, path, name: file.name, tags }),
       })
       const parsed = await safeParseResponse<{ error?: string }>(res)
       if (!res.ok) {
@@ -498,12 +498,15 @@ function ClipList({ clips }: { clips: SignedClipRow[] }) {
             ) : null}
           </div>
           <div className="space-y-1 px-2 py-1.5">
-            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-neutral-500">
-              {clip.duration_seconds ? `${clip.duration_seconds.toFixed(1)}s` : '—'}
+            <p className="truncate text-xs text-neutral-200" title={clip.name ?? undefined}>
+              {clip.name ?? '(unnamed)'}
             </p>
-            <p className="text-[10px] text-neutral-500">
+            <div className="flex items-center justify-between text-[10px] text-neutral-500">
+              <span className="font-mono uppercase tracking-[0.2em]">
+                {clip.duration_seconds ? `${clip.duration_seconds.toFixed(1)}s` : '—'}
+              </span>
               <ClientDate value={clip.created_at} mode="date" />
-            </p>
+            </div>
           </div>
         </li>
       ))}

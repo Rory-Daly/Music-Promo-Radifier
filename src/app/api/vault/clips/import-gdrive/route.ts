@@ -1,10 +1,15 @@
+import { randomUUID } from 'node:crypto'
 import { NextResponse, type NextRequest } from 'next/server'
 import { z } from 'zod'
-import { extractFolderId, listFolderVideos } from '@/lib/gdrive'
+import { extractDriveThumbnail } from '@/lib/clips/extract-thumbnail'
+import { extractFolderId, listFolderVideos, type DriveFile } from '@/lib/gdrive'
+import { createSupabaseAdminClient } from '@/lib/supabase/admin'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 
 export const runtime = 'nodejs'
-export const maxDuration = 60
+export const maxDuration = 300
+
+const THUMBNAIL_CONCURRENCY = 3
 
 const bodySchema = z.object({
   artistId: z.string().uuid(),
@@ -24,14 +29,12 @@ export async function POST(request: NextRequest) {
   }
 }
 
+type ExistingRow = { id: string; gdrive_file_id: string | null; thumbnail_url: string | null }
+
 async function handle(request: NextRequest) {
   const apiKey = process.env.GOOGLE_API_KEY
   if (!apiKey) {
-    return err(
-      'GOOGLE_API_KEY is not set on the server. See docs/gdrive.md for setup.',
-      500,
-      'missing_env',
-    )
+    return err('GOOGLE_API_KEY is not set on the server. See docs/gdrive.md.', 500, 'missing_env')
   }
 
   const supabase = await createSupabaseServerClient()
@@ -54,11 +57,7 @@ async function handle(request: NextRequest) {
 
   const folderId = extractFolderId(folder)
   if (!folderId) {
-    return err(
-      "Couldn't parse a folder ID from that input. Use the Drive folder URL or the bare ID.",
-      400,
-      'bad_folder',
-    )
+    return err("Couldn't parse a folder ID from that input.", 400, 'bad_folder')
   }
 
   const { data: membership } = await supabase
@@ -69,7 +68,7 @@ async function handle(request: NextRequest) {
     .maybeSingle()
   if (!membership) return err('Not a member of this artist', 403, 'forbidden')
 
-  let files
+  let files: DriveFile[]
   try {
     files = await listFolderVideos(folderId, apiKey)
   } catch (e) {
@@ -80,63 +79,118 @@ async function handle(request: NextRequest) {
     return NextResponse.json(
       {
         imported: 0,
-        total: 0,
-        skipped: 0,
-        message:
-          'No video files found in that folder. Check the folder is shared "Anyone with the link" and contains videos.',
+        updated: 0,
+        thumbnails: 0,
+        message: 'No video files found. Confirm the folder is shared "Anyone with the link".',
       },
       { status: 200 },
     )
   }
 
-  // Skip files already imported for this artist.
+  // Look up any clips this artist already has for these Drive file IDs so
+  // we can reuse their UUIDs (and skip thumbnail generation for ones that
+  // already have a thumbnail).
   const { data: existing } = await supabase
     .from('clips')
-    .select('gdrive_file_id')
+    .select('id, gdrive_file_id, thumbnail_url')
     .eq('artist_id', artistId)
     .in(
       'gdrive_file_id',
       files.map((f) => f.id),
     )
-  const existingSet = new Set((existing ?? []).map((r) => r.gdrive_file_id))
-  const newFiles = files.filter((f) => !existingSet.has(f.id))
+  const existingByFileId = new Map<string, ExistingRow>(
+    ((existing ?? []) as ExistingRow[])
+      .filter((r): r is ExistingRow & { gdrive_file_id: string } => r.gdrive_file_id !== null)
+      .map((r) => [r.gdrive_file_id, r]),
+  )
 
-  if (newFiles.length === 0) {
-    return NextResponse.json(
-      {
-        imported: 0,
-        total: files.length,
-        skipped: files.length,
-        message: 'All files in that folder are already imported.',
-      },
-      { status: 200 },
-    )
+  // Decide work per file: clip UUID, whether we need a fresh thumbnail.
+  type WorkItem = {
+    file: DriveFile
+    clipId: string
+    needsThumbnail: boolean
+    isNew: boolean
   }
+  const work: WorkItem[] = files.map((file) => {
+    const ex = existingByFileId.get(file.id)
+    return {
+      file,
+      clipId: ex?.id ?? randomUUID(),
+      needsThumbnail: !ex?.thumbnail_url,
+      isNew: !ex,
+    }
+  })
 
-  const rows = newFiles.map((f) => ({
-    artist_id: artistId,
-    source: 'gdrive' as const,
-    gdrive_file_id: f.id,
-    duration_seconds: f.durationSeconds,
-    width: f.width,
-    height: f.height,
-    thumbnail_url: f.thumbnailLink,
-  }))
+  // Generate thumbnails in parallel (capped) and upload to the thumbnails
+  // bucket via the admin client so we don't depend on the user's session
+  // for a server-side concurrent operation.
+  const admin = createSupabaseAdminClient()
+  const thumbnailUrls = new Map<string, string>()
+  let thumbnailsMade = 0
+  await withConcurrency(work, THUMBNAIL_CONCURRENCY, async (w) => {
+    if (!w.needsThumbnail) return
+    const buf = await extractDriveThumbnail(w.file.id, apiKey)
+    if (!buf) return
+    const path = `${artistId}/${w.clipId}.jpg`
+    const { error: uploadError } = await admin.storage
+      .from('thumbnails')
+      .upload(path, buf, { contentType: 'image/jpeg', upsert: true })
+    if (uploadError) return
+    const { data } = admin.storage.from('thumbnails').getPublicUrl(path)
+    thumbnailUrls.set(w.file.id, data.publicUrl)
+    thumbnailsMade++
+  })
 
-  const { data: inserted, error: insertError } = await supabase
+  // Build upsert payload. `tags` is omitted on purpose — Postgres
+  // preserves the existing column on update, and uses its default `{}`
+  // on insert.
+  const rows = work.map((w) => {
+    const existingRow = existingByFileId.get(w.file.id)
+    return {
+      id: w.clipId,
+      artist_id: artistId,
+      source: 'gdrive' as const,
+      gdrive_file_id: w.file.id,
+      name: w.file.name,
+      duration_seconds: w.file.durationSeconds,
+      width: w.file.width,
+      height: w.file.height,
+      thumbnail_url:
+        thumbnailUrls.get(w.file.id) ?? existingRow?.thumbnail_url ?? null,
+    }
+  })
+
+  const { error: upsertError } = await supabase
     .from('clips')
-    .insert(rows)
-    .select('id')
-  if (insertError) {
-    return err(`Insert failed: ${insertError.message}`, 500, 'insert_failed')
+    .upsert(rows, { onConflict: 'artist_id,gdrive_file_id' })
+  if (upsertError) {
+    return err(`Upsert failed: ${upsertError.message}`, 500, 'upsert_failed')
   }
 
+  const inserted = work.filter((w) => w.isNew).length
+  const updated = work.length - inserted
   return NextResponse.json(
     {
-      imported: inserted?.length ?? 0,
+      imported: inserted,
+      updated,
+      thumbnails: thumbnailsMade,
       total: files.length,
-      skipped: files.length - newFiles.length,
     },
     { status: 201 },
   )
+}
+
+async function withConcurrency<T>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<void>,
+): Promise<void> {
+  let index = 0
+  async function worker() {
+    while (index < items.length) {
+      const i = index++
+      await fn(items[i])
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
 }
