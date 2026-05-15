@@ -1,10 +1,19 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useState, useTransition, type FormEvent } from 'react'
+import { useMemo, useState, useTransition, type FormEvent } from 'react'
 import { ClientDate } from '@/components/ClientDate'
+import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 import type { ClipRow, TrackRow } from '@/lib/supabase/queries'
+
+const ALLOWED_AUDIO_EXT = new Set(['.wav', '.mp3', '.flac', '.aiff', '.aif', '.m4a', '.ogg'])
+const ALLOWED_VIDEO_EXT = new Set(['.mp4', '.mov', '.m4v', '.webm', '.avi', '.mkv'])
+
+function extOf(name: string): string {
+  const m = name.match(/\.[^.]+$/)
+  return (m ? m[0] : '').toLowerCase()
+}
 
 export type SignedTrackRow = TrackRow & { signedUrl: string | null }
 export type SignedClipRow = ClipRow & { signedUrl: string | null }
@@ -28,28 +37,53 @@ export function VaultClient({ artistId, initialTracks, initialClips }: Props) {
   const router = useRouter()
   const [, startTransition] = useTransition()
   const [uploadState, setUploadState] = useState<UploadState>({ kind: 'idle' })
+  const supabase = useMemo(() => createSupabaseBrowserClient(), [])
 
   async function uploadTrack(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = event.currentTarget
     const data = new FormData(form)
     const file = data.get('file')
+    const titleRaw = String(data.get('title') ?? '').trim()
     if (!(file instanceof File) || file.size === 0) {
       setUploadState({ kind: 'error', message: 'Pick an audio file first.' })
       return
     }
-    data.set('artistId', artistId)
+    const ext = extOf(file.name)
+    if (!ALLOWED_AUDIO_EXT.has(ext)) {
+      setUploadState({ kind: 'error', message: `Unsupported audio format: ${ext || '(none)'}` })
+      return
+    }
+    const trackId = crypto.randomUUID()
+    const path = `${artistId}/${trackId}${ext}`
+    const title = titleRaw.length > 0 ? titleRaw : file.name.replace(/\.[^.]+$/, '')
+
     setUploadState({ kind: 'uploading', filename: file.name })
     try {
-      const res = await fetch('/api/vault/tracks', { method: 'POST', body: data })
+      const { error: uploadError } = await supabase.storage
+        .from('tracks')
+        .upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: false })
+      if (uploadError) {
+        setUploadState({ kind: 'error', message: `Upload failed: ${uploadError.message}` })
+        return
+      }
+
+      const res = await fetch('/api/vault/tracks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ artistId, trackId, path, title }),
+      })
       const parsed = await safeParseResponse<{ error?: string; hookCount?: number; title?: string }>(res)
       if (!res.ok) {
+        await supabase.storage.from('tracks').remove([path]).catch(() => {})
         setUploadState({ kind: 'error', message: parsed.message })
         return
       }
       const body = parsed.body ?? {}
-      const note = body.hookCount ? ` (${body.hookCount} hook${body.hookCount === 1 ? '' : 's'} detected)` : ''
-      setUploadState({ kind: 'success', message: `Uploaded ${body.title ?? 'track'}${note}` })
+      const note = body.hookCount
+        ? ` (${body.hookCount} hook${body.hookCount === 1 ? '' : 's'} detected)`
+        : ''
+      setUploadState({ kind: 'success', message: `Uploaded ${body.title ?? title}${note}` })
       form.reset()
       startTransition(() => router.refresh())
     } catch (err) {
@@ -65,21 +99,46 @@ export function VaultClient({ artistId, initialTracks, initialClips }: Props) {
     const form = event.currentTarget
     const data = new FormData(form)
     const file = data.get('file')
+    const tagsRaw = String(data.get('tags') ?? '').trim()
     if (!(file instanceof File) || file.size === 0) {
       setUploadState({ kind: 'error', message: 'Pick a video file first.' })
       return
     }
-    data.set('artistId', artistId)
+    const ext = extOf(file.name)
+    if (!ALLOWED_VIDEO_EXT.has(ext)) {
+      setUploadState({ kind: 'error', message: `Unsupported video format: ${ext || '(none)'}` })
+      return
+    }
+    const clipId = crypto.randomUUID()
+    const path = `${artistId}/${clipId}${ext}`
+    const tags = tagsRaw
+      .split(',')
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0)
+      .slice(0, 10)
+
     setUploadState({ kind: 'uploading', filename: file.name })
     try {
-      const res = await fetch('/api/vault/clips', { method: 'POST', body: data })
-      const parsed = await safeParseResponse<{ error?: string; fileName?: string }>(res)
+      const { error: uploadError } = await supabase.storage
+        .from('clips')
+        .upload(path, file, { contentType: file.type || 'application/octet-stream', upsert: false })
+      if (uploadError) {
+        setUploadState({ kind: 'error', message: `Upload failed: ${uploadError.message}` })
+        return
+      }
+
+      const res = await fetch('/api/vault/clips', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ artistId, clipId, path, tags }),
+      })
+      const parsed = await safeParseResponse<{ error?: string }>(res)
       if (!res.ok) {
+        await supabase.storage.from('clips').remove([path]).catch(() => {})
         setUploadState({ kind: 'error', message: parsed.message })
         return
       }
-      const body = parsed.body ?? {}
-      setUploadState({ kind: 'success', message: `Uploaded ${body.fileName ?? 'clip'}` })
+      setUploadState({ kind: 'success', message: `Uploaded ${file.name}` })
       form.reset()
       startTransition(() => router.refresh())
     } catch (err) {
