@@ -1,7 +1,7 @@
 import { after, NextResponse, type NextRequest } from 'next/server'
 import { createSupabaseAdminClient } from '@/lib/supabase/admin'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
-import { runRender } from '@/lib/render/engine'
+import { runRender, type ClipRef } from '@/lib/render/engine'
 import { parseStoragePath, renderRequestSchema } from '@/lib/render/request'
 
 export const runtime = 'nodejs'
@@ -73,20 +73,27 @@ export async function POST(request: NextRequest) {
 
   const { data: clipRows, error: clipsError } = await supabase
     .from('clips')
-    .select('id, artist_id, storage_url')
+    .select('id, artist_id, source, storage_url, gdrive_file_id')
     .in('id', input.clipIds)
   if (clipsError) return err('Failed to load clips', 500, 'clips_query_failed')
   if (!clipRows || clipRows.length !== input.clipIds.length) {
     return err('One or more clips not found', 404, 'clip_not_found')
   }
-  const clipRefs: Array<{ bucket: string; path: string }> = []
+  const clipRefs: ClipRef[] = []
   for (const clip of clipRows) {
     if (clip.artist_id !== input.artistId) {
       return err('Clip belongs to another artist', 403, 'forbidden')
     }
-    const ref = parseStoragePath(clip.storage_url)
-    if (!ref) return err(`Clip ${clip.id} has no storage_url`, 422, 'no_clip_storage')
-    clipRefs.push(ref)
+    if (clip.source === 'gdrive') {
+      if (!clip.gdrive_file_id) {
+        return err(`Clip ${clip.id} marked gdrive but has no file id`, 422, 'no_gdrive_id')
+      }
+      clipRefs.push({ source: 'gdrive', fileId: clip.gdrive_file_id })
+    } else {
+      const ref = parseStoragePath(clip.storage_url)
+      if (!ref) return err(`Clip ${clip.id} has no storage_url`, 422, 'no_clip_storage')
+      clipRefs.push({ source: 'supabase', bucket: ref.bucket, path: ref.path })
+    }
   }
 
   const { data: created, error: insertError } = await supabase

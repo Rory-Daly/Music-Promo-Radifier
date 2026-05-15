@@ -234,21 +234,13 @@ export function ComposeForm({ artistId, tracks, hooks, clips }: Props) {
                         : 'border-neutral-800 hover:border-neutral-600',
                     )}
                   >
-                    <div className="aspect-[9/16] bg-neutral-950">
-                      {clip.signedUrl ? (
-                         
-                        <video
-                          src={clip.signedUrl}
-                          muted
-                          playsInline
-                          preload="metadata"
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-neutral-600">
-                          no preview
-                        </div>
-                      )}
+                    <div className="relative aspect-[9/16] bg-neutral-950">
+                      <ClipPreview clip={clip} />
+                      {clip.source === 'gdrive' ? (
+                        <span className="absolute right-1 top-1 rounded-sm bg-neutral-950/80 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.15em] text-neutral-300">
+                          drive
+                        </span>
+                      ) : null}
                     </div>
                     <div className="flex items-center justify-between gap-1 px-2 py-1 text-[10px]">
                       <span className="font-mono uppercase tracking-[0.2em] text-neutral-500">
@@ -330,6 +322,37 @@ export function ComposeForm({ artistId, tracks, hooks, clips }: Props) {
       </form>
 
       {submitState.kind === 'tracking' ? <RenderStatusPanel state={submitState} /> : null}
+    </div>
+  )
+}
+
+function ClipPreview({ clip }: { clip: SignedClipRow }) {
+  if (clip.signedUrl) {
+    return (
+      <video
+        src={clip.signedUrl}
+        muted
+        playsInline
+        preload="metadata"
+        className="h-full w-full object-cover"
+      />
+    )
+  }
+  if (clip.thumbnail_url) {
+     
+    return (
+      <img
+        src={clip.thumbnail_url}
+        alt=""
+        className="h-full w-full object-cover"
+        loading="lazy"
+        referrerPolicy="no-referrer"
+      />
+    )
+  }
+  return (
+    <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-neutral-600">
+      no preview
     </div>
   )
 }

@@ -1,10 +1,17 @@
 import 'server-only'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { createWriteStream, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { Readable } from 'node:stream'
+import { pipeline } from 'node:stream/promises'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { composeReel } from '../../../scripts/lib/compose'
 import { markRenderStatus, uploadRenderOutput } from '../../../scripts/lib/persist-render'
+import { downloadDriveFile } from '@/lib/gdrive'
+
+export type ClipRef =
+  | { source: 'supabase'; bucket: string; path: string }
+  | { source: 'gdrive'; fileId: string }
 
 export type RunRenderInput = {
   renderId: string
@@ -13,7 +20,7 @@ export type RunRenderInput = {
   audioPath: string
   hookStartSeconds: number
   hookEndSeconds: number
-  clips: Array<{ bucket: string; path: string }>
+  clips: ClipRef[]
   title?: string
   cta?: string
   artistName?: string
@@ -37,7 +44,7 @@ export async function runRender(client: SupabaseClient, input: RunRenderInput): 
   try {
     await markRenderStatus(client, input.renderId, { status: 'rendering' })
 
-    const audioLocalPath = await downloadObjectToFile(
+    const audioLocalPath = await downloadSupabaseObjectToFile(
       client,
       input.audioBucket,
       input.audioPath,
@@ -48,13 +55,16 @@ export async function runRender(client: SupabaseClient, input: RunRenderInput): 
     const clipLocalPaths: string[] = []
     for (let i = 0; i < input.clips.length; i++) {
       const clip = input.clips[i]
-      const path = await downloadObjectToFile(
-        client,
-        clip.bucket,
-        clip.path,
-        workDir,
-        `clip-${i}`,
-      )
+      const path =
+        clip.source === 'supabase'
+          ? await downloadSupabaseObjectToFile(
+              client,
+              clip.bucket,
+              clip.path,
+              workDir,
+              `clip-${i}`,
+            )
+          : await downloadDriveObjectToFile(clip.fileId, workDir, `clip-${i}`)
       clipLocalPaths.push(path)
     }
 
@@ -95,7 +105,7 @@ export async function runRender(client: SupabaseClient, input: RunRenderInput): 
   }
 }
 
-async function downloadObjectToFile(
+async function downloadSupabaseObjectToFile(
   client: SupabaseClient,
   bucket: string,
   path: string,
@@ -110,5 +120,18 @@ async function downloadObjectToFile(
   const ext = path.match(/\.[^.]+$/)?.[0] ?? ''
   const localPath = join(workDir, `${baseName}${ext}`)
   writeFileSync(localPath, buffer)
+  return localPath
+}
+
+async function downloadDriveObjectToFile(
+  fileId: string,
+  workDir: string,
+  baseName: string,
+): Promise<string> {
+  const apiKey = process.env.GOOGLE_API_KEY
+  if (!apiKey) throw new Error('GOOGLE_API_KEY not set — cannot resolve Drive clip')
+  const { body } = await downloadDriveFile(fileId, apiKey)
+  const localPath = join(workDir, `${baseName}.mp4`)
+  await pipeline(Readable.fromWeb(body as never), createWriteStream(localPath))
   return localPath
 }

@@ -36,6 +36,7 @@ type Tab = 'tracks' | 'clips'
 type UploadState =
   | { kind: 'idle' }
   | { kind: 'uploading'; filename: string; progressPct: number; stage: 'upload' | 'process' }
+  | { kind: 'importing'; folder: string }
   | { kind: 'success'; message: string }
   | { kind: 'error'; message: string }
 
@@ -112,6 +113,51 @@ export function VaultClient({ artistId, initialTracks, initialClips }: Props) {
       setUploadState({
         kind: 'error',
         message: err instanceof Error ? err.message : 'Upload failed',
+      })
+    }
+  }
+
+  async function importGdriveFolder(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = event.currentTarget
+    const data = new FormData(form)
+    const folder = String(data.get('folder') ?? '').trim()
+    if (folder.length === 0) {
+      setUploadState({ kind: 'error', message: 'Paste a Drive folder URL or ID first.' })
+      return
+    }
+    setUploadState({ kind: 'importing', folder })
+    try {
+      const res = await fetch('/api/vault/clips/import-gdrive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ artistId, folder }),
+      })
+      const parsed = await safeParseResponse<{
+        error?: string
+        imported?: number
+        total?: number
+        skipped?: number
+        message?: string
+      }>(res)
+      if (!res.ok) {
+        setUploadState({ kind: 'error', message: parsed.message })
+        return
+      }
+      const body = parsed.body ?? {}
+      const imported = body.imported ?? 0
+      const skipped = body.skipped ?? 0
+      const note =
+        imported === 0
+          ? (body.message ?? 'Nothing new to import.')
+          : `Imported ${imported} clip${imported === 1 ? '' : 's'}${skipped ? ` (${skipped} already present)` : ''}.`
+      setUploadState({ kind: 'success', message: note })
+      form.reset()
+      startTransition(() => router.refresh())
+    } catch (err) {
+      setUploadState({
+        kind: 'error',
+        message: err instanceof Error ? err.message : 'Drive import failed',
       })
     }
   }
@@ -194,6 +240,9 @@ export function VaultClient({ artistId, initialTracks, initialClips }: Props) {
           stage={uploadState.stage}
         />
       ) : null}
+      {uploadState.kind === 'importing' ? (
+        <Banner tone="info">Importing from Drive…</Banner>
+      ) : null}
       {uploadState.kind === 'success' ? <Banner tone="success">{uploadState.message}</Banner> : null}
       {uploadState.kind === 'error' ? <Banner tone="error">{uploadState.message}</Banner> : null}
 
@@ -240,6 +289,38 @@ export function VaultClient({ artistId, initialTracks, initialClips }: Props) {
         </section>
       ) : (
         <section className="space-y-6" role="tabpanel" aria-label="Clips">
+          <form
+            onSubmit={importGdriveFolder}
+            className="space-y-3 rounded-md border border-neutral-800 bg-neutral-900/40 p-4"
+          >
+            <h2 className="text-sm font-medium text-neutral-200">Import from Google Drive</h2>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+              <label className="block">
+                <span className="block text-xs uppercase tracking-[0.2em] text-neutral-500">
+                  Folder URL or ID
+                </span>
+                <input
+                  type="text"
+                  name="folder"
+                  required
+                  placeholder="https://drive.google.com/drive/folders/…"
+                  className="mt-1 block w-full rounded-md border border-neutral-800 bg-neutral-900 px-2.5 py-1.5 text-sm text-neutral-100 focus:border-neutral-600 focus:outline-none"
+                />
+              </label>
+              <button
+                type="submit"
+                disabled={uploadState.kind === 'importing'}
+                className="rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:opacity-50"
+              >
+                Import
+              </button>
+            </div>
+            <p className="text-xs text-neutral-500">
+              The folder must be shared as <strong>Anyone with the link</strong>. Drive IDs are
+              stored in the clip — files stay in Drive and are streamed at render time.
+            </p>
+          </form>
+
           <form
             onSubmit={uploadClip}
             className="space-y-3 rounded-md border border-neutral-800 bg-neutral-900/40 p-4"
@@ -407,21 +488,13 @@ function ClipList({ clips }: { clips: SignedClipRow[] }) {
           key={clip.id}
           className="overflow-hidden rounded-md border border-neutral-800 bg-neutral-900/40"
         >
-          <div className="aspect-[9/16] bg-neutral-950">
-            {clip.signedUrl ? (
-               
-              <video
-                src={clip.signedUrl}
-                muted
-                playsInline
-                preload="metadata"
-                className="h-full w-full object-cover"
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-neutral-600">
-                no preview
-              </div>
-            )}
+          <div className="relative aspect-[9/16] bg-neutral-950">
+            <ClipPreview clip={clip} />
+            {clip.source === 'gdrive' ? (
+              <span className="absolute right-1 top-1 rounded-sm bg-neutral-950/80 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.15em] text-neutral-300">
+                drive
+              </span>
+            ) : null}
           </div>
           <div className="space-y-1 px-2 py-1.5">
             <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-neutral-500">
@@ -457,6 +530,37 @@ async function safeParseResponse<T extends { error?: string }>(
   } catch {
     return { body: null, message: `Non-JSON response (status ${res.status}): ${text.slice(0, 200)}` }
   }
+}
+
+function ClipPreview({ clip }: { clip: SignedClipRow }) {
+  if (clip.signedUrl) {
+    return (
+      <video
+        src={clip.signedUrl}
+        muted
+        playsInline
+        preload="metadata"
+        className="h-full w-full object-cover"
+      />
+    )
+  }
+  if (clip.thumbnail_url) {
+     
+    return (
+      <img
+        src={clip.thumbnail_url}
+        alt=""
+        className="h-full w-full object-cover"
+        loading="lazy"
+        referrerPolicy="no-referrer"
+      />
+    )
+  }
+  return (
+    <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-neutral-600">
+      no preview
+    </div>
+  )
 }
 
 function formatSeconds(seconds: number): string {
