@@ -76,6 +76,83 @@ export async function ensureFirstArtist(name: string): Promise<Artist | null> {
   return artist as Artist
 }
 
+export type RenderRow = {
+  id: string
+  artist_id: string
+  track_id: string | null
+  status: 'queued' | 'rendering' | 'ready' | 'failed'
+  output_url: string | null
+  aspect_ratio: '9x16' | '1x1' | '16x9' | null
+  template_id: string | null
+  error: string | null
+  created_at: string
+}
+
+export async function listRecentRenders(artistId: string, limit = 6): Promise<RenderRow[]> {
+  const supabase = await createSupabaseServerClient()
+  const { data, error } = await supabase
+    .from('renders')
+    .select('id, artist_id, track_id, status, output_url, aspect_ratio, template_id, error, created_at')
+    .eq('artist_id', artistId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) {
+    console.error('Failed to load renders:', error.message)
+    return []
+  }
+  return (data ?? []) as RenderRow[]
+}
+
+export type TrackRow = {
+  id: string
+  artist_id: string
+  title: string
+  audio_url: string | null
+  duration_seconds: number | null
+  bpm: number | null
+  created_at: string
+}
+
+export async function listTracks(artistId: string): Promise<TrackRow[]> {
+  const supabase = await createSupabaseServerClient()
+  const { data, error } = await supabase
+    .from('tracks')
+    .select('id, artist_id, title, audio_url, duration_seconds, bpm, created_at')
+    .eq('artist_id', artistId)
+    .order('created_at', { ascending: false })
+  if (error) {
+    console.error('Failed to load tracks:', error.message)
+    return []
+  }
+  return (data ?? []) as TrackRow[]
+}
+
+export type ClipRow = {
+  id: string
+  artist_id: string
+  source: 'upload' | 'gdrive'
+  storage_url: string | null
+  duration_seconds: number | null
+  width: number | null
+  height: number | null
+  thumbnail_url: string | null
+  created_at: string
+}
+
+export async function listClips(artistId: string): Promise<ClipRow[]> {
+  const supabase = await createSupabaseServerClient()
+  const { data, error } = await supabase
+    .from('clips')
+    .select('id, artist_id, source, storage_url, duration_seconds, width, height, thumbnail_url, created_at')
+    .eq('artist_id', artistId)
+    .order('created_at', { ascending: false })
+  if (error) {
+    console.error('Failed to load clips:', error.message)
+    return []
+  }
+  return (data ?? []) as ClipRow[]
+}
+
 function slugify(value: string): string {
   return value
     .toLowerCase()
