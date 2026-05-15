@@ -138,7 +138,7 @@ async function handle(request: NextRequest) {
   let thumbnailsMade = 0
   await withConcurrency(work, THUMBNAIL_CONCURRENCY, async (w) => {
     if (!w.needsThumbnail) return
-    const result = await extractDriveThumbnail(w.file.id, apiKey)
+    const result = await extractDriveThumbnail(w.file.id, apiKey, w.file.size)
     if (!result.ok) {
       failures.push({ name: w.file.name, reason: result.error })
       return
