@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { ClientDate } from '@/components/ClientDate'
 import {
   ensureFirstArtist,
   getCurrentUserAndArtists,
@@ -139,7 +140,6 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 function RenderCard({ render }: { render: RenderRow }) {
-  const created = new Date(render.created_at).toLocaleString()
   const ready = render.status === 'ready' && render.output_url
   return (
     <div className="overflow-hidden rounded-md border border-neutral-800 bg-neutral-900/40">
@@ -165,7 +165,9 @@ function RenderCard({ render }: { render: RenderRow }) {
         <span className="font-mono uppercase tracking-[0.2em] text-neutral-500">
           {render.aspect_ratio ?? 'reel'}
         </span>
-        <span className="text-neutral-500">{created}</span>
+        <span className="text-neutral-500">
+          <ClientDate value={render.created_at} />
+        </span>
       </div>
     </div>
   )

@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useState, useTransition, type FormEvent } from 'react'
+import { ClientDate } from '@/components/ClientDate'
 import { cn } from '@/lib/utils'
 import type { ClipRow, TrackRow } from '@/lib/supabase/queries'
 
@@ -261,7 +262,7 @@ function TrackList({ tracks }: { tracks: SignedTrackRow[] }) {
             ) : null}
           </div>
           <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.2em] text-neutral-500">
-            {new Date(track.created_at).toLocaleDateString()}
+            <ClientDate value={track.created_at} mode="date" />
           </span>
         </li>
       ))}
@@ -301,7 +302,7 @@ function ClipList({ clips }: { clips: SignedClipRow[] }) {
               {clip.duration_seconds ? `${clip.duration_seconds.toFixed(1)}s` : '—'}
             </p>
             <p className="text-[10px] text-neutral-500">
-              {new Date(clip.created_at).toLocaleDateString()}
+              <ClientDate value={clip.created_at} mode="date" />
             </p>
           </div>
         </li>
