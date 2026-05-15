@@ -12,8 +12,13 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body className={inter.className}>
+    // suppressHydrationWarning on <html> and <body> stops React complaining when
+    // browser extensions (ColorZilla's `cz-shortcut-listen`, Grammarly's
+    // `data-gr-*`, etc.) mutate these elements between SSR and hydration.
+    // Only attribute mismatches on these two nodes are silenced — children
+    // still hydrate normally so real app-level mismatches still warn.
+    <html lang="en" suppressHydrationWarning>
+      <body className={inter.className} suppressHydrationWarning>
         {children}
         <SpeedInsights />
       </body>
