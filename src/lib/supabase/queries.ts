@@ -145,6 +145,7 @@ export type ClipRow = {
   artist_id: string
   source: 'upload' | 'gdrive'
   storage_url: string | null
+  gdrive_file_id: string | null
   duration_seconds: number | null
   width: number | null
   height: number | null
@@ -156,7 +157,9 @@ export async function listClips(artistId: string): Promise<ClipRow[]> {
   const supabase = await createSupabaseServerClient()
   const { data, error } = await supabase
     .from('clips')
-    .select('id, artist_id, source, storage_url, duration_seconds, width, height, thumbnail_url, created_at')
+    .select(
+      'id, artist_id, source, storage_url, gdrive_file_id, duration_seconds, width, height, thumbnail_url, created_at',
+    )
     .eq('artist_id', artistId)
     .order('created_at', { ascending: false })
   if (error) {

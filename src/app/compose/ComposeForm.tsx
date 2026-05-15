@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { ClipPreview } from '@/components/ClipPreview'
 import { cn } from '@/lib/utils'
 import type { HookRow, TrackRow } from '@/lib/supabase/queries'
 import type { SignedClipRow } from '../vault/VaultClient'
@@ -322,37 +323,6 @@ export function ComposeForm({ artistId, tracks, hooks, clips }: Props) {
       </form>
 
       {submitState.kind === 'tracking' ? <RenderStatusPanel state={submitState} /> : null}
-    </div>
-  )
-}
-
-function ClipPreview({ clip }: { clip: SignedClipRow }) {
-  if (clip.signedUrl) {
-    return (
-      <video
-        src={clip.signedUrl}
-        muted
-        playsInline
-        preload="metadata"
-        className="h-full w-full object-cover"
-      />
-    )
-  }
-  if (clip.thumbnail_url) {
-     
-    return (
-      <img
-        src={clip.thumbnail_url}
-        alt=""
-        className="h-full w-full object-cover"
-        loading="lazy"
-        referrerPolicy="no-referrer"
-      />
-    )
-  }
-  return (
-    <div className="flex h-full w-full items-center justify-center text-[10px] uppercase tracking-[0.2em] text-neutral-600">
-      no preview
     </div>
   )
 }
