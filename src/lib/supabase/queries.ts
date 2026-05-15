@@ -55,25 +55,14 @@ export async function ensureFirstArtist(name: string): Promise<Artist | null> {
   if (existing && existing.length > 0) return null
 
   const slug = slugify(name) + '-' + user.id.slice(0, 6)
-  const { data: artist, error: artistError } = await supabase
-    .from('artists')
-    .insert({ name, slug })
-    .select('id, name, slug, bio, contact_email, brand_kit')
-    .single()
-  if (artistError || !artist) {
-    console.error('Failed to create first artist:', artistError?.message)
+  const { data, error } = await supabase
+    .rpc('create_artist_with_owner', { p_name: name, p_slug: slug })
+    .single<Artist>()
+  if (error || !data) {
+    console.error('Failed to create first artist:', error?.message)
     return null
   }
-
-  const { error: membershipError } = await supabase
-    .from('artist_memberships')
-    .insert({ user_id: user.id, artist_id: artist.id, role: 'owner' })
-  if (membershipError) {
-    console.error('Failed to create membership:', membershipError.message)
-    return null
-  }
-
-  return artist as Artist
+  return data
 }
 
 export type RenderRow = {
