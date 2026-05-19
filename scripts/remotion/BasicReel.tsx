@@ -10,7 +10,9 @@ import {
   useVideoConfig,
   interpolate,
 } from 'remotion'
+import { type AspectRatio, getAspectRatioConfig } from './aspect-ratios'
 import { DISPLAY_FONT, SANS_FONT } from './fonts'
+import { type Transition, planTransition } from './transitions'
 
 export type BasicReelProps = {
   audioFile: string
@@ -18,6 +20,8 @@ export type BasicReelProps = {
   durationSeconds: number
   clipFiles: string[]
   clipDurationsSeconds?: number[]
+  aspectRatio?: AspectRatio
+  transition?: Transition
   trackTitle?: string
   artistName?: string
   ctaText?: string
@@ -29,27 +33,47 @@ export const BasicReel: React.FC<BasicReelProps> = ({
   audioStartSeconds,
   clipFiles,
   clipDurationsSeconds,
+  aspectRatio = '9x16',
+  transition = 'cut',
   trackTitle,
   artistName = 'illutible',
   ctaText = 'illutible.com',
   wordmarkFile,
 }) => {
-  const { fps, durationInFrames } = useVideoConfig()
-  const clipFrames = computeClipFrames(clipFiles.length, durationInFrames, clipDurationsSeconds, fps)
+  const { fps, durationInFrames, width, height } = useVideoConfig()
+  const config = getAspectRatioConfig(aspectRatio)
+  const transitionPlan = planTransition(transition)
+  const transitionFrames = Math.max(0, Math.round(transitionPlan.durationSeconds * fps))
 
-  let runningFrom = 0
+  const slots = computeSlotFrames(clipFiles.length, durationInFrames, clipDurationsSeconds, fps)
+
   return (
     <AbsoluteFill style={{ backgroundColor: '#000' }}>
       {clipFiles.map((name, i) => {
-        const from = runningFrom
-        const dur = clipFrames[i]
-        runningFrom += dur
+        const slotStart = slots.slice(0, i).reduce((a, b) => a + b, 0)
+        const slotFrames = slots[i]
+        const isFirst = i === 0
+        const isLast = i === clipFiles.length - 1
+
+        // For an overlapping transition (crossfade), each clip extends past
+        // its slot by transitionFrames so the next clip can fade in over the
+        // top. The last clip doesn't extend (would push the composition past
+        // its declared duration).
+        const sequenceFrames =
+          transitionPlan.overlapping && !isLast
+            ? slotFrames + transitionFrames
+            : slotFrames
+
         return (
-          <Sequence key={`${name}-${i}`} from={from} durationInFrames={dur}>
-            <OffthreadVideo
-              src={staticFile(name)}
-              muted
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          <Sequence key={`${name}-${i}`} from={slotStart} durationInFrames={sequenceFrames}>
+            <ClipFrame
+              src={name}
+              transition={transition}
+              transitionFrames={transitionFrames}
+              sequenceFrames={sequenceFrames}
+              isFirst={isFirst}
+              isLast={isLast}
+              orientation={config.orientation}
             />
           </Sequence>
         )
@@ -60,11 +84,67 @@ export const BasicReel: React.FC<BasicReelProps> = ({
           trackTitle={trackTitle}
           artistName={artistName}
           wordmarkFile={wordmarkFile}
+          canvasWidth={width}
+          canvasHeight={height}
         />
       )}
       <Watermark artistName={artistName} wordmarkFile={wordmarkFile} />
-      {ctaText && <EndCTA ctaText={ctaText} wordmarkFile={wordmarkFile} />}
+      {ctaText && (
+        <EndCTA
+          ctaText={ctaText}
+          wordmarkFile={wordmarkFile}
+          canvasHeight={height}
+        />
+      )}
     </AbsoluteFill>
+  )
+}
+
+const ClipFrame: React.FC<{
+  src: string
+  transition: Transition
+  transitionFrames: number
+  sequenceFrames: number
+  isFirst: boolean
+  isLast: boolean
+  orientation: 'portrait' | 'square' | 'landscape'
+}> = ({ src, transition, transitionFrames, sequenceFrames, isFirst, isLast }) => {
+  const frame = useCurrentFrame()
+
+  let opacity = 1
+  if (transition === 'crossfade' && transitionFrames > 0) {
+    // Fade in over first transitionFrames (unless first clip).
+    if (!isFirst && frame < transitionFrames) {
+      opacity = frame / transitionFrames
+    }
+    // Fade out over last transitionFrames (unless last clip — last keeps
+    // its visual to the end).
+    if (!isLast && frame > sequenceFrames - transitionFrames) {
+      opacity = Math.min(opacity, (sequenceFrames - frame) / transitionFrames)
+    }
+  } else if (transition === 'fade-black' && transitionFrames > 0) {
+    const half = Math.max(1, Math.round(transitionFrames / 2))
+    // First clip fades in from black at the start of the reel.
+    if (frame < half) {
+      opacity = frame / half
+    }
+    // Last clip fades to black at the end of the reel.
+    if (frame > sequenceFrames - half) {
+      opacity = Math.min(opacity, (sequenceFrames - frame) / half)
+    }
+  }
+
+  return (
+    <OffthreadVideo
+      src={staticFile(src)}
+      muted
+      style={{
+        width: '100%',
+        height: '100%',
+        objectFit: 'cover',
+        opacity: Math.max(0, Math.min(1, opacity)),
+      }}
+    />
   )
 }
 
@@ -74,7 +154,9 @@ const TitleOverlay: React.FC<{
   trackTitle: string
   artistName: string
   wordmarkFile?: string
-}> = ({ trackTitle, artistName, wordmarkFile }) => {
+  canvasWidth: number
+  canvasHeight: number
+}> = ({ trackTitle, artistName, wordmarkFile, canvasWidth, canvasHeight }) => {
   const frame = useCurrentFrame()
   const { fps } = useVideoConfig()
   const opacity = interpolate(
@@ -83,6 +165,12 @@ const TitleOverlay: React.FC<{
     [0, 1, 1, 0],
     { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' },
   )
+  // Scale title sizing by the canvas's short edge so the same overlay
+  // reads well on every aspect ratio. Numbers tuned for 1080 short edge
+  // (which is the case for every preset we ship).
+  const shortEdge = Math.min(canvasWidth, canvasHeight)
+  const titleFontSize = Math.round((84 * shortEdge) / 1080)
+  const wordmarkLabelSize = Math.round((28 * shortEdge) / 1080)
   return (
     <div
       style={{
@@ -97,7 +185,7 @@ const TitleOverlay: React.FC<{
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        paddingTop: '14%',
+        paddingTop: '8%',
         color: '#fff',
         pointerEvents: 'none',
       }}
@@ -106,9 +194,10 @@ const TitleOverlay: React.FC<{
         <Img
           src={staticFile(wordmarkFile)}
           style={{
-            width: '70%',
+            width: '54%',
+            maxWidth: 760,
             height: 'auto',
-            marginBottom: 28,
+            marginBottom: 24,
             transform: `translateX(${WORDMARK_CENTROID_OFFSET_PCT}%)`,
             filter: 'drop-shadow(0 4px 18px rgba(0,0,0,0.6))',
           }}
@@ -117,7 +206,7 @@ const TitleOverlay: React.FC<{
         <div
           style={{
             fontFamily: SANS_FONT,
-            fontSize: 28,
+            fontSize: wordmarkLabelSize,
             letterSpacing: '0.42em',
             fontWeight: 300,
             opacity: 0.75,
@@ -132,7 +221,7 @@ const TitleOverlay: React.FC<{
       <div
         style={{
           fontFamily: DISPLAY_FONT,
-          fontSize: 84,
+          fontSize: titleFontSize,
           fontWeight: 500,
           letterSpacing: '0.02em',
           textAlign: 'center',
@@ -157,9 +246,10 @@ const Watermark: React.FC<{ artistName: string; wordmarkFile?: string }> = ({
         src={staticFile(wordmarkFile)}
         style={{
           position: 'absolute',
-          bottom: 56,
-          left: 48,
-          width: 280,
+          bottom: '5%',
+          left: '4.5%',
+          width: '22%',
+          maxWidth: 320,
           height: 'auto',
           opacity: 0.55,
           transform: `translateX(${WORDMARK_CENTROID_OFFSET_PCT}%)`,
@@ -173,8 +263,8 @@ const Watermark: React.FC<{ artistName: string; wordmarkFile?: string }> = ({
     <div
       style={{
         position: 'absolute',
-        bottom: 56,
-        left: 48,
+        bottom: '5%',
+        left: '4.5%',
         color: '#fff',
         fontFamily: SANS_FONT,
         fontSize: 22,
@@ -191,9 +281,10 @@ const Watermark: React.FC<{ artistName: string; wordmarkFile?: string }> = ({
   )
 }
 
-const EndCTA: React.FC<{ ctaText: string; wordmarkFile?: string }> = ({
+const EndCTA: React.FC<{ ctaText: string; wordmarkFile?: string; canvasHeight: number }> = ({
   ctaText,
   wordmarkFile,
+  canvasHeight,
 }) => {
   const frame = useCurrentFrame()
   const { fps, durationInFrames } = useVideoConfig()
@@ -203,6 +294,8 @@ const EndCTA: React.FC<{ ctaText: string; wordmarkFile?: string }> = ({
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   })
+  const ctaFontSize = Math.round((42 * canvasHeight) / 1920)
+  const labelFontSize = Math.round((22 * canvasHeight) / 1920)
   return (
     <div
       style={{
@@ -218,7 +311,7 @@ const EndCTA: React.FC<{ ctaText: string; wordmarkFile?: string }> = ({
         flexDirection: 'column',
         justifyContent: 'flex-end',
         alignItems: 'center',
-        paddingBottom: '14%',
+        paddingBottom: '8%',
         color: '#fff',
         fontFamily: SANS_FONT,
         pointerEvents: 'none',
@@ -228,9 +321,10 @@ const EndCTA: React.FC<{ ctaText: string; wordmarkFile?: string }> = ({
         <Img
           src={staticFile(wordmarkFile)}
           style={{
-            width: '60%',
+            width: '46%',
+            maxWidth: 640,
             height: 'auto',
-            marginBottom: 26,
+            marginBottom: 24,
             transform: `translateX(${WORDMARK_CENTROID_OFFSET_PCT}%)`,
             filter: 'drop-shadow(0 4px 18px rgba(0,0,0,0.6))',
           }}
@@ -238,7 +332,7 @@ const EndCTA: React.FC<{ ctaText: string; wordmarkFile?: string }> = ({
       )}
       <div
         style={{
-          fontSize: 22,
+          fontSize: labelFontSize,
           letterSpacing: '0.42em',
           fontWeight: 500,
           opacity: 0.85,
@@ -251,7 +345,7 @@ const EndCTA: React.FC<{ ctaText: string; wordmarkFile?: string }> = ({
       </div>
       <div
         style={{
-          fontSize: 42,
+          fontSize: ctaFontSize,
           fontWeight: 600,
           letterSpacing: '-0.01em',
           textShadow: '0 4px 18px rgba(0,0,0,0.7)',
@@ -263,7 +357,7 @@ const EndCTA: React.FC<{ ctaText: string; wordmarkFile?: string }> = ({
   )
 }
 
-function computeClipFrames(
+function computeSlotFrames(
   clipCount: number,
   totalFrames: number,
   perClipSeconds: number[] | undefined,

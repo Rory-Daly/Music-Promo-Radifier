@@ -7,7 +7,12 @@ import { basename, dirname, extname, join, resolve as resolvePath } from 'node:p
 import { planBeatAlignedCuts } from './beat-alignment'
 import { discoverClips, mulberry32, selectClips, type SelectedClip } from './clip-selection'
 import { detectTempo } from './tempo-detection'
+import {
+  type AspectRatio,
+  getAspectRatioConfig,
+} from '../remotion/aspect-ratios'
 import type { BasicReelProps } from '../remotion/BasicReel'
+import { DEFAULT_TRANSITION, planTransition, type Transition } from '../remotion/transitions'
 
 export type ComposeReelOptions = {
   audioPath: string
@@ -28,6 +33,8 @@ export type ComposeReelOptions = {
   cta?: string
   noOverlays?: boolean
   slowmo?: number
+  aspectRatio?: AspectRatio
+  transition?: Transition
   wordmarkPath?: string
   fontsDir?: string
   onProgress?: (info: { stage: string; pct?: number; message?: string }) => void
@@ -50,6 +57,10 @@ export async function composeReel(opts: ComposeReelOptions): Promise<ComposeReel
   const noOverlays = opts.noOverlays ?? false
   const artistName = opts.artistName ?? 'illutible'
   const cta = opts.cta ?? 'illutible.com'
+  const aspectRatio = opts.aspectRatio ?? '9x16'
+  const transition = opts.transition ?? DEFAULT_TRANSITION
+  const aspectConfig = getAspectRatioConfig(aspectRatio)
+  const transitionPlan = planTransition(transition)
   const progress = opts.onProgress ?? (() => {})
 
   const audioAbs = resolvePath(opts.audioPath)
@@ -120,20 +131,29 @@ export async function composeReel(opts: ComposeReelOptions): Promise<ComposeReel
 
     progress({
       stage: 'preprocess',
-      message: `Pre-processing ${selections.length} clip(s) to 1080x1920 @ ${fps}fps`,
+      message: `Pre-processing ${selections.length} clip(s) to ${aspectConfig.width}x${aspectConfig.height} @ ${fps}fps (${aspectRatio}, ${transition})`,
     })
     const clipNames: string[] = []
+    // For overlapping transitions (crossfade), every non-last clip needs an
+    // extra `transition.durationSeconds` of footage at its tail so the next
+    // clip can fade in over the top. Last clip is exactly its slot length.
+    const tailExtensionSeconds = transitionPlan.overlapping
+      ? transitionPlan.durationSeconds
+      : 0
     for (let i = 0; i < selections.length; i++) {
       const sel = selections[i]
+      const isLast = i === selections.length - 1
+      const extension = isLast ? 0 : tailExtensionSeconds
       const outName = `clip${i}.mp4`
       const outPath = join(publicDir, outName)
       await preprocessClip(
         sel.path,
         outPath,
-        sel.outputDurationSeconds,
+        sel.outputDurationSeconds + extension,
         fps,
         slowmo,
         sel.sourceStartSeconds,
+        aspectConfig.ffmpegCropFilter,
       )
       clipNames.push(outName)
     }
@@ -161,6 +181,8 @@ export async function composeReel(opts: ComposeReelOptions): Promise<ComposeReel
       durationSeconds,
       clipFiles: clipNames,
       clipDurationsSeconds,
+      aspectRatio,
+      transition,
       trackTitle: noOverlays ? '' : (opts.title ?? deriveTitle(opts.audioPath)),
       artistName,
       ctaText: noOverlays ? '' : cta,
@@ -285,6 +307,7 @@ function preprocessClip(
   fps: number,
   slowmo: number,
   sourceStartSeconds: number,
+  cropFilter: string,
 ): Promise<void> {
   const sourceDurationSeconds = outputDurationSeconds * slowmo
   const setptsFactor = 1 / slowmo
@@ -295,7 +318,7 @@ function preprocessClip(
       '-ss', String(sourceStartSeconds),
       '-t', String(sourceDurationSeconds),
       '-i', sourcePath,
-      '-vf', `${setptsFilter}scale=-2:1920:flags=lanczos,crop=1080:1920,setsar=1`,
+      '-vf', `${setptsFilter}${cropFilter}`,
       '-r', String(fps),
       '-c:v', 'libx264',
       '-preset', 'fast',

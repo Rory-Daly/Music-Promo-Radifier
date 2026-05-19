@@ -105,7 +105,7 @@ export async function POST(request: NextRequest) {
       track_id: input.trackId,
       hook_id: input.hookId ?? null,
       template_id: 'basic-reel',
-      aspect_ratio: '9x16',
+      aspect_ratio: input.aspectRatio,
       clip_ids: input.clipIds,
       status: 'queued',
     })
@@ -146,6 +146,8 @@ export async function POST(request: NextRequest) {
         artistName: input.artistName,
         slowmo: input.slowmo,
         noOverlays: input.noOverlays,
+        aspectRatio: input.aspectRatio,
+        transition: input.transition,
         driveAuth,
       })
     } catch (e) {

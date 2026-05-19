@@ -1,4 +1,6 @@
 import { z } from 'zod'
+import { ASPECT_RATIOS, type AspectRatio } from '../../../scripts/remotion/aspect-ratios'
+import { TRANSITIONS, type Transition } from '../../../scripts/remotion/transitions'
 
 export const renderRequestSchema = z
   .object({
@@ -8,6 +10,12 @@ export const renderRequestSchema = z
     hookStartSeconds: z.number().nonnegative().optional(),
     hookEndSeconds: z.number().nonnegative().optional(),
     clipIds: z.array(z.string().uuid()).min(1).max(20),
+    aspectRatio: z
+      .enum(ASPECT_RATIOS as readonly [AspectRatio, ...AspectRatio[]])
+      .default('9x16'),
+    transition: z
+      .enum(TRANSITIONS as readonly [Transition, ...Transition[]])
+      .default('cut'),
     title: z.string().trim().max(120).optional(),
     cta: z.string().trim().max(80).optional(),
     artistName: z.string().trim().max(80).optional(),

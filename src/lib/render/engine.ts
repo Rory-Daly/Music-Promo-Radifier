@@ -7,6 +7,8 @@ import { pipeline } from 'node:stream/promises'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { composeReel } from '../../../scripts/lib/compose'
 import { markRenderStatus, uploadRenderOutput } from '../../../scripts/lib/persist-render'
+import { type AspectRatio } from '../../../scripts/remotion/aspect-ratios'
+import { type Transition } from '../../../scripts/remotion/transitions'
 import { downloadDriveFile, type DriveAuth } from '@/lib/gdrive'
 
 export type ClipRef =
@@ -26,6 +28,8 @@ export type RunRenderInput = {
   artistName?: string
   slowmo?: number
   noOverlays?: boolean
+  aspectRatio?: AspectRatio
+  transition?: Transition
   wordmarkPath?: string
   driveAuth?: DriveAuth | null
 }
@@ -86,6 +90,8 @@ export async function runRender(client: SupabaseClient, input: RunRenderInput): 
       artistName: input.artistName,
       slowmo: input.slowmo,
       noOverlays: input.noOverlays,
+      aspectRatio: input.aspectRatio,
+      transition: input.transition,
       wordmarkPath: input.wordmarkPath,
     })
 

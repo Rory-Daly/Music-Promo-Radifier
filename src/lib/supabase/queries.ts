@@ -71,7 +71,7 @@ export type RenderRow = {
   track_id: string | null
   status: 'queued' | 'rendering' | 'ready' | 'failed'
   output_url: string | null
-  aspect_ratio: '9x16' | '1x1' | '16x9' | null
+  aspect_ratio: '9x16' | '1x1' | '16x9' | '4x5' | null
   template_id: string | null
   error: string | null
   created_at: string

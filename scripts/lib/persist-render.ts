@@ -7,7 +7,7 @@ export type PersistRenderInput = {
   trackId?: string
   hookId?: string
   templateId?: string
-  aspectRatio?: '9x16' | '1x1' | '16x9'
+  aspectRatio?: '9x16' | '1x1' | '16x9' | '4x5'
   platform?: string
   clipIds?: string[]
 }

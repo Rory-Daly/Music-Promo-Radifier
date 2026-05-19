@@ -7,6 +7,8 @@ import {
   markRenderStatus,
   uploadRenderOutput,
 } from './lib/persist-render'
+import { ASPECT_RATIOS, type AspectRatio } from './remotion/aspect-ratios'
+import { TRANSITIONS, type Transition } from './remotion/transitions'
 import { createAdminClient, readAdminConfigFromEnv } from './lib/supabase-admin'
 
 loadEnv({ path: '.env', quiet: true })
@@ -33,6 +35,8 @@ const argsSchema = z
     cta: z.string().default('illutible.com'),
     noOverlays: z.coerce.boolean().default(false),
     slowmo: z.coerce.number().positive().max(2).default(1),
+    aspectRatio: z.enum(ASPECT_RATIOS as readonly [AspectRatio, ...AspectRatio[]]).default('9x16'),
+    transition: z.enum(TRANSITIONS as readonly [Transition, ...Transition[]]).default('cut'),
     wordmark: z.string().default('assets/illutible-wordmark.png'),
     artistId: z.string().uuid().optional(),
     trackId: z.string().uuid().optional(),
@@ -113,6 +117,9 @@ Optional:
   --cta=TEXT           End-card CTA. Default: illutible.com.
   --noOverlays=true    Skip brand overlays.
   --slowmo=N           Play clips at N times speed. Default: 1.0.
+  --aspectRatio=R      Output format: 9x16 | 1x1 | 4x5 | 16x9. Default: 9x16.
+  --transition=T       Inter-clip transition: cut | crossfade | fade-black.
+                       Default: cut.
   --wordmark=PATH      Path to artist wordmark PNG.
 
 Persistence (optional — needs SUPABASE_SERVICE_ROLE_KEY in env):
@@ -151,7 +158,7 @@ async function main(): Promise<void> {
       trackId: args.trackId,
       hookId: args.hookId,
       templateId: 'basic-reel',
-      aspectRatio: '9x16',
+      aspectRatio: args.aspectRatio,
     })
     renderId = created.id
     await markRenderStatus(persistence.client, renderId, { status: 'rendering' })
@@ -178,6 +185,8 @@ async function main(): Promise<void> {
       cta: args.cta,
       noOverlays: args.noOverlays,
       slowmo: args.slowmo,
+      aspectRatio: args.aspectRatio,
+      transition: args.transition,
       wordmarkPath: args.wordmark,
       onProgress: ({ stage, pct, message }) => {
         if (pct !== undefined) console.log(`  [${stage}] ${pct}%`)

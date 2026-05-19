@@ -3,6 +3,16 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { ClipPreview } from '@/components/ClipPreview'
+import {
+  ASPECT_RATIO_CONFIGS,
+  ASPECT_RATIOS,
+  type AspectRatio,
+} from '../../../scripts/remotion/aspect-ratios'
+import {
+  TRANSITION_LABELS,
+  TRANSITIONS,
+  type Transition,
+} from '../../../scripts/remotion/transitions'
 import { cn } from '@/lib/utils'
 import type { HookRow, TrackRow } from '@/lib/supabase/queries'
 import type { SignedClipRow } from '../vault/VaultClient'
@@ -16,10 +26,18 @@ type RenderPollResponse = {
   error: string | null
 }
 
+type TrackedRender = {
+  renderId: string
+  aspectRatio: AspectRatio
+  status: RenderStatus
+  outputUrl: string | null
+  error: string | null
+}
+
 type SubmitState =
   | { kind: 'idle' }
   | { kind: 'submitting' }
-  | { kind: 'tracking'; renderId: string; status: RenderStatus; outputUrl: string | null; error: string | null }
+  | { kind: 'tracking'; renders: TrackedRender[] }
   | { kind: 'error'; message: string }
 
 type Props = {
@@ -39,7 +57,20 @@ export function ComposeForm({ artistId, tracks, hooks, clips }: Props) {
   const [cta, setCta] = useState('')
   const [slowmo, setSlowmo] = useState(1)
   const [noOverlays, setNoOverlays] = useState(false)
+  const [selectedAspectRatios, setSelectedAspectRatios] = useState<Set<AspectRatio>>(
+    () => new Set<AspectRatio>(['9x16']),
+  )
+  const [transition, setTransition] = useState<Transition>('cut')
   const [submitState, setSubmitState] = useState<SubmitState>({ kind: 'idle' })
+
+  function toggleAspectRatio(ratio: AspectRatio) {
+    setSelectedAspectRatios((prev) => {
+      const next = new Set(prev)
+      if (next.has(ratio)) next.delete(ratio)
+      else next.add(ratio)
+      return next
+    })
+  }
 
   const hooksForTrack = useMemo(
     () => hooks.filter((h) => h.track_id === selectedTrackId),
@@ -54,23 +85,44 @@ export function ComposeForm({ artistId, tracks, hooks, clips }: Props) {
 
   useEffect(() => {
     if (submitState.kind !== 'tracking') return
-    if (submitState.status === 'ready' || submitState.status === 'failed') return
-    const renderId = submitState.renderId
+    const pending = submitState.renders.filter(
+      (r) => r.status !== 'ready' && r.status !== 'failed',
+    )
+    if (pending.length === 0) return
+
     const interval = setInterval(async () => {
-      try {
-        const res = await fetch(`/api/renders/${renderId}`, { cache: 'no-store' })
-        if (!res.ok) return
-        const data = (await res.json()) as RenderPollResponse
-        setSubmitState({
+      const updates = await Promise.all(
+        pending.map(async (r) => {
+          try {
+            const res = await fetch(`/api/renders/${r.renderId}`, { cache: 'no-store' })
+            if (!res.ok) return null
+            const data = (await res.json()) as RenderPollResponse
+            return {
+              renderId: r.renderId,
+              status: data.status,
+              outputUrl: data.output_url,
+              error: data.error,
+            }
+          } catch {
+            return null
+          }
+        }),
+      )
+      setSubmitState((prev) => {
+        if (prev.kind !== 'tracking') return prev
+        const byId = new Map(
+          updates
+            .filter((u): u is NonNullable<typeof u> => u !== null)
+            .map((u) => [u.renderId, u]),
+        )
+        return {
           kind: 'tracking',
-          renderId,
-          status: data.status,
-          outputUrl: data.output_url,
-          error: data.error,
-        })
-      } catch {
-        // poll again
-      }
+          renders: prev.renders.map((r) => {
+            const u = byId.get(r.renderId)
+            return u ? { ...r, status: u.status, outputUrl: u.outputUrl, error: u.error } : r
+          }),
+        }
+      })
     }, 2500)
     return () => clearInterval(interval)
   }, [submitState])
@@ -98,38 +150,50 @@ export function ComposeForm({ artistId, tracks, hooks, clips }: Props) {
       setSubmitState({ kind: 'error', message: 'Pick at least one clip.' })
       return
     }
+    const aspectRatios = Array.from(selectedAspectRatios)
+    if (aspectRatios.length === 0) {
+      setSubmitState({ kind: 'error', message: 'Pick at least one output format.' })
+      return
+    }
     setSubmitState({ kind: 'submitting' })
 
     try {
-      const body = {
-        artistId,
-        trackId: selectedTrackId,
-        hookId: selectedHookId,
-        clipIds: Array.from(selectedClipIds),
-        title: title.trim() || undefined,
-        cta: cta.trim() || undefined,
-        slowmo,
-        noOverlays,
-      }
-      const res = await fetch('/api/renders', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-      const data = (await res.json()) as { renderId?: string; error?: string }
-      if (!res.ok || !data.renderId) {
-        setSubmitState({
-          kind: 'error',
-          message: data.error ?? `Render request failed (${res.status})`,
-        })
-        return
-      }
+      const clipIds = Array.from(selectedClipIds)
+      const results = await Promise.all(
+        aspectRatios.map(async (aspectRatio) => {
+          const body = {
+            artistId,
+            trackId: selectedTrackId,
+            hookId: selectedHookId,
+            clipIds,
+            aspectRatio,
+            transition,
+            title: title.trim() || undefined,
+            cta: cta.trim() || undefined,
+            slowmo,
+            noOverlays,
+          }
+          const res = await fetch('/api/renders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          })
+          const data = (await res.json()) as { renderId?: string; error?: string }
+          if (!res.ok || !data.renderId) {
+            throw new Error(data.error ?? `Render request failed (${res.status}) for ${aspectRatio}`)
+          }
+          return { aspectRatio, renderId: data.renderId }
+        }),
+      )
       setSubmitState({
         kind: 'tracking',
-        renderId: data.renderId,
-        status: 'queued',
-        outputUrl: null,
-        error: null,
+        renders: results.map((r) => ({
+          renderId: r.renderId,
+          aspectRatio: r.aspectRatio,
+          status: 'queued' as RenderStatus,
+          outputUrl: null,
+          error: null,
+        })),
       })
     } catch (err) {
       setSubmitState({
@@ -146,11 +210,10 @@ export function ComposeForm({ artistId, tracks, hooks, clips }: Props) {
     return <EmptyState message="No clips yet. Upload some footage from the vault first." />
   }
 
-  const submitDisabled =
-    submitState.kind === 'submitting' ||
-    (submitState.kind === 'tracking' &&
-      submitState.status !== 'ready' &&
-      submitState.status !== 'failed')
+  const trackingPending =
+    submitState.kind === 'tracking' &&
+    submitState.renders.some((r) => r.status !== 'ready' && r.status !== 'failed')
+  const submitDisabled = submitState.kind === 'submitting' || trackingPending
 
   return (
     <div className="space-y-8">
@@ -266,7 +329,56 @@ export function ComposeForm({ artistId, tracks, hooks, clips }: Props) {
           </ul>
         </Section>
 
-        <Section label="4 · Options">
+        <Section label={`4 · Output formats (${selectedAspectRatios.size} selected)`}>
+          <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {ASPECT_RATIOS.map((ratio) => {
+              const cfg = ASPECT_RATIO_CONFIGS[ratio]
+              const checked = selectedAspectRatios.has(ratio)
+              return (
+                <li key={ratio}>
+                  <button
+                    type="button"
+                    aria-pressed={checked}
+                    onClick={() => toggleAspectRatio(ratio)}
+                    className={cn(
+                      'flex w-full items-center gap-2 rounded-md border-2 px-3 py-2 text-left text-xs transition',
+                      checked
+                        ? 'border-neutral-100 text-neutral-100'
+                        : 'border-neutral-800 text-neutral-400 hover:border-neutral-600 hover:text-neutral-200',
+                    )}
+                  >
+                    <AspectThumb ratio={ratio} active={checked} />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">{cfg.label}</p>
+                      <p className="font-mono text-[10px] text-neutral-500">
+                        {cfg.width}×{cfg.height}
+                      </p>
+                    </div>
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+          <p className="mt-2 text-xs text-neutral-500">
+            Each selected format fires its own render — the dashboard will show them all.
+          </p>
+        </Section>
+
+        <Section label="5 · Transition">
+          <select
+            value={transition}
+            onChange={(e) => setTransition(e.target.value as Transition)}
+            className="w-full rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-600 focus:outline-none sm:w-80"
+          >
+            {TRANSITIONS.map((t) => (
+              <option key={t} value={t}>
+                {TRANSITION_LABELS[t]}
+              </option>
+            ))}
+          </select>
+        </Section>
+
+        <Section label="6 · Options">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <label className="block">
               <span className="block text-xs uppercase tracking-[0.2em] text-neutral-500">
@@ -322,7 +434,9 @@ export function ComposeForm({ artistId, tracks, hooks, clips }: Props) {
             disabled={submitDisabled}
             className="rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:opacity-50"
           >
-            {submitState.kind === 'submitting' ? 'Queuing…' : 'Render reel'}
+            {submitState.kind === 'submitting'
+              ? 'Queuing…'
+              : `Render ${selectedAspectRatios.size} reel${selectedAspectRatios.size === 1 ? '' : 's'}`}
           </button>
           {submitState.kind === 'error' ? (
             <p className="text-sm text-red-400">{submitState.message}</p>
@@ -358,47 +472,78 @@ function EmptyState({ message }: { message: string }) {
   )
 }
 
-function RenderStatusPanel({
-  state,
-}: {
-  state: { renderId: string; status: RenderStatus; outputUrl: string | null; error: string | null }
-}) {
+function RenderStatusPanel({ state }: { state: { renders: TrackedRender[] } }) {
   return (
-    <section className="space-y-3 rounded-md border border-neutral-800 bg-neutral-900/40 p-4">
-      <header className="flex items-center justify-between">
-        <h2 className="text-xs font-medium uppercase tracking-[0.3em] text-neutral-500">
-          Render · {state.renderId.slice(0, 8)}
-        </h2>
-        <StatusPill status={state.status} />
-      </header>
-      {state.status === 'ready' && state.outputUrl ? (
-        <div className="space-y-2">
-          <div className="overflow-hidden rounded-md bg-neutral-950">
-            { }
-            <video
-              src={state.outputUrl}
-              className="mx-auto block aspect-[9/16] w-full max-w-xs object-cover"
-              controls
-              preload="metadata"
-            />
-          </div>
-          <a
-            href={state.outputUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-block text-xs text-neutral-300 underline underline-offset-4 hover:text-neutral-100"
+    <section className="space-y-3">
+      <h2 className="text-xs font-medium uppercase tracking-[0.3em] text-neutral-500">
+        Renders ({state.renders.length})
+      </h2>
+      <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {state.renders.map((r) => (
+          <li
+            key={r.renderId}
+            className="space-y-2 rounded-md border border-neutral-800 bg-neutral-900/40 p-3"
           >
-            Download MP4
-          </a>
-        </div>
-      ) : state.status === 'failed' ? (
-        <p className="text-sm text-red-400">{state.error ?? 'Render failed.'}</p>
-      ) : (
-        <p className="text-sm text-neutral-400">
-          Working… we&apos;ll poll every couple of seconds and show the result here.
-        </p>
-      )}
+            <header className="flex items-center justify-between gap-2">
+              <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-neutral-500">
+                {ASPECT_RATIO_CONFIGS[r.aspectRatio].label}
+              </span>
+              <StatusPill status={r.status} />
+            </header>
+            {r.status === 'ready' && r.outputUrl ? (
+              <>
+                <div className="overflow-hidden rounded bg-neutral-950">
+                  { }
+                  <video
+                    src={r.outputUrl}
+                    className="block w-full"
+                    style={{ aspectRatio: aspectRatioCss(r.aspectRatio) }}
+                    controls
+                    preload="metadata"
+                  />
+                </div>
+                <a
+                  href={r.outputUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-block text-xs text-neutral-300 underline underline-offset-4 hover:text-neutral-100"
+                >
+                  Download MP4
+                </a>
+              </>
+            ) : r.status === 'failed' ? (
+              <p className="text-xs text-red-400">{r.error ?? 'Render failed.'}</p>
+            ) : (
+              <p className="text-xs text-neutral-400">{r.status}…</p>
+            )}
+          </li>
+        ))}
+      </ul>
     </section>
+  )
+}
+
+function aspectRatioCss(ratio: AspectRatio): string {
+  const c = ASPECT_RATIO_CONFIGS[ratio]
+  return `${c.width} / ${c.height}`
+}
+
+function AspectThumb({ ratio, active }: { ratio: AspectRatio; active: boolean }) {
+  const cfg = ASPECT_RATIO_CONFIGS[ratio]
+  const longEdge = 28
+  const w = (cfg.width / Math.max(cfg.width, cfg.height)) * longEdge
+  const h = (cfg.height / Math.max(cfg.width, cfg.height)) * longEdge
+  return (
+    <span
+      aria-hidden
+      style={{ width: longEdge, height: longEdge }}
+      className="flex shrink-0 items-center justify-center"
+    >
+      <span
+        style={{ width: w, height: h }}
+        className={cn('block rounded-sm', active ? 'bg-neutral-100' : 'bg-neutral-700')}
+      />
+    </span>
   )
 }
 
