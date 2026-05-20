@@ -125,6 +125,15 @@ Each render incurs one Drive download per clip. A typical reel uses 4–6 clips;
 
 **OAuth: "Google did not return a refresh token"** — the user previously approved the app, so Google skips refresh-token issuance. Fix: visit [Google Account → Security → Apps with access](https://myaccount.google.com/permissions), remove "Legatograph", and reconnect from the vault.
 
+**OAuth: "Access blocked: Legatograph has not completed the Google verification process"** — the OAuth consent screen is in **Testing** mode (the correct setting for a single-artist / dev tool) and the Google account you're trying to sign in with isn't on the **Test users** list. `drive.readonly` is a sensitive scope, so in Testing mode only listed test users can complete consent.
+
+Fix:
+1. Open [Google Cloud Console → OAuth consent screen](https://console.cloud.google.com/apis/credentials/consent) and make sure the project picker (top bar) matches the project that owns your `GOOGLE_OAUTH_CLIENT_ID`.
+2. Scroll to **Test users** → **+ ADD USERS** → add the Google account you sign in with. Save.
+3. Retry **Connect Google Drive** in the vault. Click past the "unverified app" warning via **Advanced → Go to Legatograph (unsafe)** — expected for an unverified internal tool.
+
+Publishing the app (instead of Testing) would require Google verification because of the sensitive scope, so it's not worth doing for personal/single-artist use.
+
 ## What's NOT supported (yet)
 
 - **Per-file imports** — only folder imports right now. Easy to add if needed (the helper exposes `getFileMetadata` and `extractFileId`).

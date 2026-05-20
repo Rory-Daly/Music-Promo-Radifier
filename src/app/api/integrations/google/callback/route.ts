@@ -6,28 +6,28 @@ import { createSupabaseServerClient } from '@/lib/supabase/server'
 
 export const runtime = 'nodejs'
 
-function back(returnTo: string, status: 'success' | 'error', message?: string) {
-  const url = new URL(returnTo, 'http://placeholder')
+function back(origin: string, returnTo: string, status: 'success' | 'error', message?: string) {
+  const url = new URL(returnTo, origin)
   url.searchParams.set('drive', status)
   if (message) url.searchParams.set('msg', message)
-  return NextResponse.redirect(url.pathname + url.search)
+  return NextResponse.redirect(url)
 }
 
 export async function GET(request: NextRequest) {
-  const { searchParams } = new URL(request.url)
+  const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
   const stateParam = searchParams.get('state')
   const errorParam = searchParams.get('error')
 
   const rawCookie = request.cookies.get(OAUTH_COOKIE_NAME)?.value
   if (!rawCookie) {
-    return back('/vault', 'error', 'OAuth session expired. Try connecting again.')
+    return back(origin, '/vault', 'error', 'OAuth session expired. Try connecting again.')
   }
   let payload: OAuthCookiePayload
   try {
     payload = JSON.parse(rawCookie) as OAuthCookiePayload
   } catch {
-    return back('/vault', 'error', 'Invalid OAuth cookie.')
+    return back(origin, '/vault', 'error', 'Invalid OAuth cookie.')
   }
   const returnTo = payload.returnTo || '/vault'
 
@@ -44,18 +44,18 @@ export async function GET(request: NextRequest) {
   }
 
   if (errorParam) {
-    return clearCookie(back(returnTo, 'error', errorParam))
+    return clearCookie(back(origin, returnTo, 'error', errorParam))
   }
   if (!code || !stateParam) {
-    return clearCookie(back(returnTo, 'error', 'Missing code or state.'))
+    return clearCookie(back(origin, returnTo, 'error', 'Missing code or state.'))
   }
   if (stateParam !== payload.state) {
-    return clearCookie(back(returnTo, 'error', 'State mismatch.'))
+    return clearCookie(back(origin, returnTo, 'error', 'State mismatch.'))
   }
 
   const oauth = readOAuthClientFromEnv()
   if (!oauth) {
-    return clearCookie(back(returnTo, 'error', 'OAuth client not configured on server.'))
+    return clearCookie(back(origin, returnTo, 'error', 'OAuth client not configured on server.'))
   }
 
   const supabase = await createSupabaseServerClient()
@@ -73,10 +73,9 @@ export async function GET(request: NextRequest) {
     .eq('user_id', user.id)
     .maybeSingle()
   if (!membership) {
-    return clearCookie(back(returnTo, 'error', 'Not a member of this artist.'))
+    return clearCookie(back(origin, returnTo, 'error', 'Not a member of this artist.'))
   }
 
-  const origin = new URL(request.url).origin
   const redirectUri = `${origin}/api/integrations/google/callback`
   let tokens
   try {
@@ -88,11 +87,12 @@ export async function GET(request: NextRequest) {
     })
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)
-    return clearCookie(back(returnTo, 'error', message.slice(0, 200)))
+    return clearCookie(back(origin, returnTo, 'error', message.slice(0, 200)))
   }
   if (!tokens.refreshToken) {
     return clearCookie(
       back(
+        origin,
         returnTo,
         'error',
         'Google did not return a refresh token. Revoke the app on your Google Account → Security → "Apps with access" and reconnect.',
@@ -115,8 +115,8 @@ export async function GET(request: NextRequest) {
     { onConflict: 'artist_id,provider' },
   )
   if (upsertError) {
-    return clearCookie(back(returnTo, 'error', `Storing tokens failed: ${upsertError.message}`))
+    return clearCookie(back(origin, returnTo, 'error', `Storing tokens failed: ${upsertError.message}`))
   }
 
-  return clearCookie(back(returnTo, 'success'))
+  return clearCookie(back(origin, returnTo, 'success'))
 }
