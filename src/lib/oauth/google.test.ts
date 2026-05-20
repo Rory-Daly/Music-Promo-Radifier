@@ -16,14 +16,14 @@ describe('buildAuthUrl', () => {
     const url = new URL(
       buildAuthUrl({
         clientId: 'client123.apps.googleusercontent.com',
-        redirectUri: 'http://localhost:3000/api/integrations/google/callback',
+        redirectUri: 'http://localhost:3030/api/integrations/google/callback',
         state: 'random-state-abc',
       }),
     )
     expect(url.origin + url.pathname).toBe('https://accounts.google.com/o/oauth2/v2/auth')
     expect(url.searchParams.get('client_id')).toBe('client123.apps.googleusercontent.com')
     expect(url.searchParams.get('redirect_uri')).toBe(
-      'http://localhost:3000/api/integrations/google/callback',
+      'http://localhost:3030/api/integrations/google/callback',
     )
     expect(url.searchParams.get('state')).toBe('random-state-abc')
     expect(url.searchParams.get('response_type')).toBe('code')

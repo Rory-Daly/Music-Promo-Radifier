@@ -266,7 +266,7 @@ All inputs validated with Zod (per project conventions).
 
 ```
 # .env.example
-NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_APP_URL=http://localhost:3030
 
 # Supabase
 NEXT_PUBLIC_SUPABASE_URL=

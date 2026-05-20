@@ -36,7 +36,7 @@ The app supports both. If both are configured, OAuth takes precedence per-artist
    - Scopes: add `https://www.googleapis.com/auth/drive.readonly`.
    - Test users: add your own Google account email if the app is in **Testing** mode.
 3. Back at **Create OAuth client ID**: type **Web application**.
-4. Authorized redirect URIs: add `http://localhost:3000/api/integrations/google/callback`. For production, also add your deployed URL with the same path.
+4. Authorized redirect URIs: add `http://localhost:3030/api/integrations/google/callback`. For production, also add your deployed URL with the same path.
 5. **Create** → copy the **Client ID** and **Client secret**.
 
 ### 2. Add credentials to `.env.local`
@@ -50,7 +50,7 @@ Restart `npm run dev` so the new env vars are picked up.
 
 ### 3. Connect Google Drive in the vault
 
-1. Open [http://localhost:3000/vault](http://localhost:3000/vault) → **Clips** tab.
+1. Open [http://localhost:3030/vault](http://localhost:3030/vault) → **Clips** tab.
 2. Click **Connect Google Drive**. You'll redirect to Google's consent screen, grant Drive read access, then redirect back.
 3. The banner should say "Google Drive connected". You can now import private folders (no public sharing required) and won't hit the per-file anonymous quotas.
 
@@ -93,7 +93,7 @@ Knowing the unguessable folder ID is the access token. Don't post the URL public
 
 ## Importing a folder
 
-1. Open [http://localhost:3000/vault](http://localhost:3000/vault) → **Clips** tab.
+1. Open [http://localhost:3030/vault](http://localhost:3030/vault) → **Clips** tab.
 2. Paste the folder URL into **Import from Google Drive** → click **Import**.
 3. The server lists every video file in the folder, skips ones already imported, and creates clip rows referencing the Drive file IDs. The actual files stay in Drive.
 4. The vault grid shows Drive clips with a small `drive` badge in the corner; thumbnails come from Drive directly (no API key in the URL, safe to expose).

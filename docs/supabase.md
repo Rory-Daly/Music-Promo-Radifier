@@ -42,8 +42,8 @@ Subsequent migrations add storage buckets (`0002`) and the security-definer arti
 
 In **Authentication → URL Configuration**:
 
-- **Site URL:** `http://localhost:3000` for local dev. Add your Vercel URL once deployed.
-- **Redirect URLs:** add `http://localhost:3000/auth/callback` (and the production equivalent later).
+- **Site URL:** `http://localhost:3030` for local dev. Add your Vercel URL once deployed.
+- **Redirect URLs:** add `http://localhost:3030/auth/callback` (and the production equivalent later).
 
 This is what the magic link points back to. Without it Supabase will reject the redirect.
 
@@ -53,7 +53,7 @@ This is what the magic link points back to. Without it Supabase will reject the 
 npm run dev
 ```
 
-Then open `http://localhost:3000`. You should be redirected to `/sign-in` (middleware sees no session). Enter your email, click the link in your inbox, and you'll land on the dashboard with a fresh artist auto-created from your email handle.
+Then open `http://localhost:3030`. You should be redirected to `/sign-in` (middleware sees no session). Enter your email, click the link in your inbox, and you'll land on the dashboard with a fresh artist auto-created from your email handle.
 
 ## Troubleshooting
 

@@ -25,7 +25,7 @@ export default async function SignInPage({ searchParams }: PageProps) {
     }
     const supabase = await createSupabaseServerClient()
     const headersList = await headers()
-    const host = headersList.get('host') ?? 'localhost:3000'
+    const host = headersList.get('host') ?? 'localhost:3030'
     const proto = headersList.get('x-forwarded-proto') ?? 'http'
     const origin = `${proto}://${host}`
     const { error: signInError } = await supabase.auth.signInWithOtp({
