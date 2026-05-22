@@ -222,7 +222,7 @@ export function ComposeForm({ artistId, tracks, hooks, clips }: Props) {
           <select
             value={selectedTrackId}
             onChange={(e) => changeTrack(e.target.value)}
-            className="w-full rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-600 focus:outline-none"
+            className="w-full rounded-md border border-brand-rule bg-brand-bg-2 px-3 py-2 text-sm text-brand-fg focus:border-brand-accent focus:outline-none"
           >
             {tracks.map((track) => (
               <option key={track.id} value={track.id}>
@@ -235,7 +235,7 @@ export function ComposeForm({ artistId, tracks, hooks, clips }: Props) {
 
         <Section label="2 · Hook">
           {hooksForTrack.length === 0 ? (
-            <p className="text-sm text-neutral-400">
+            <p className="text-sm text-brand-fg-dim">
               No hooks detected for this track yet. Re-upload from the vault to run detection.
             </p>
           ) : (
@@ -246,8 +246,8 @@ export function ComposeForm({ artistId, tracks, hooks, clips }: Props) {
                     className={cn(
                       'flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2 transition',
                       selectedHookId === hook.id
-                        ? 'border-neutral-300 bg-neutral-900/70'
-                        : 'border-neutral-800 bg-neutral-900/40 hover:border-neutral-600',
+                        ? 'border-brand-accent bg-brand-bg-2'
+                        : 'border-brand-rule bg-brand-bg-2 hover:border-brand-accent',
                     )}
                   >
                     <input
@@ -256,21 +256,21 @@ export function ComposeForm({ artistId, tracks, hooks, clips }: Props) {
                       value={hook.id}
                       checked={selectedHookId === hook.id}
                       onChange={(e) => setSelectedHookId(e.target.value)}
-                      className="accent-neutral-100"
+                      className="accent-brand-fg"
                     />
-                    <span className="font-mono text-xs text-neutral-300">
+                    <span className="font-mono text-xs text-brand-fg-dim">
                       {formatSeconds(hook.start_seconds)}–{formatSeconds(hook.end_seconds)}
                     </span>
-                    <span className="text-xs text-neutral-500">
+                    <span className="text-xs text-brand-fg-faint">
                       ({(hook.end_seconds - hook.start_seconds).toFixed(0)}s)
                     </span>
                     {hook.label ? (
-                      <span className="rounded-sm bg-neutral-800 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.15em] text-neutral-300">
+                      <span className="rounded-sm bg-brand-bg-2 px-1.5 py-0.5 text-[10px] uppercase tracking-[0.15em] text-brand-fg-dim">
                         {hook.label}
                       </span>
                     ) : null}
                     {hook.score !== null ? (
-                      <span className="ml-auto font-mono text-[10px] text-neutral-500">
+                      <span className="ml-auto font-mono text-[10px] text-brand-fg-faint">
                         score {hook.score.toFixed(3)}
                       </span>
                     ) : null}
@@ -294,31 +294,31 @@ export function ComposeForm({ artistId, tracks, hooks, clips }: Props) {
                     className={cn(
                       'block w-full overflow-hidden rounded-md border-2 text-left transition',
                       checked
-                        ? 'border-neutral-100'
-                        : 'border-neutral-800 hover:border-neutral-600',
+                        ? 'border-brand-fg'
+                        : 'border-brand-rule hover:border-brand-accent',
                     )}
                   >
-                    <div className="relative aspect-[9/16] bg-neutral-950">
+                    <div className="relative aspect-[9/16] bg-brand-bg">
                       <ClipPreview clip={clip} />
                       {clip.source === 'gdrive' ? (
-                        <span className="absolute right-1 top-1 rounded-sm bg-neutral-950/80 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.15em] text-neutral-300">
+                        <span className="absolute right-1 top-1 rounded-sm bg-brand-bg px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.15em] text-brand-fg-dim">
                           drive
                         </span>
                       ) : null}
                     </div>
                     <div className="space-y-0.5 px-2 py-1">
                       <p
-                        className="truncate text-[11px] text-neutral-200"
+                        className="truncate text-[11px] text-brand-fg"
                         title={clip.name ?? undefined}
                       >
                         {clip.name ?? '(unnamed)'}
                       </p>
                       <div className="flex items-center justify-between text-[10px]">
-                        <span className="font-mono uppercase tracking-[0.2em] text-neutral-500">
+                        <span className="font-mono uppercase tracking-[0.2em] text-brand-fg-faint">
                           {clip.duration_seconds ? `${clip.duration_seconds.toFixed(1)}s` : '—'}
                         </span>
                         {checked ? (
-                          <span className="text-neutral-100">selected</span>
+                          <span className="text-brand-fg">selected</span>
                         ) : null}
                       </div>
                     </div>
@@ -343,14 +343,14 @@ export function ComposeForm({ artistId, tracks, hooks, clips }: Props) {
                     className={cn(
                       'flex w-full items-center gap-2 rounded-md border-2 px-3 py-2 text-left text-xs transition',
                       checked
-                        ? 'border-neutral-100 text-neutral-100'
-                        : 'border-neutral-800 text-neutral-400 hover:border-neutral-600 hover:text-neutral-200',
+                        ? 'border-brand-fg text-brand-fg'
+                        : 'border-brand-rule text-brand-fg-dim hover:border-brand-accent hover:text-brand-fg',
                     )}
                   >
                     <AspectThumb ratio={ratio} active={checked} />
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium">{cfg.label}</p>
-                      <p className="font-mono text-[10px] text-neutral-500">
+                      <p className="font-mono text-[10px] text-brand-fg-faint">
                         {cfg.width}×{cfg.height}
                       </p>
                     </div>
@@ -359,7 +359,7 @@ export function ComposeForm({ artistId, tracks, hooks, clips }: Props) {
               )
             })}
           </ul>
-          <p className="mt-2 text-xs text-neutral-500">
+          <p className="mt-2 text-xs text-brand-fg-faint">
             Each selected format fires its own render — the dashboard will show them all.
           </p>
         </Section>
@@ -368,7 +368,7 @@ export function ComposeForm({ artistId, tracks, hooks, clips }: Props) {
           <select
             value={transition}
             onChange={(e) => setTransition(e.target.value as Transition)}
-            className="w-full rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-sm text-neutral-100 focus:border-neutral-600 focus:outline-none sm:w-80"
+            className="w-full rounded-md border border-brand-rule bg-brand-bg-2 px-3 py-2 text-sm text-brand-fg focus:border-brand-accent focus:outline-none sm:w-80"
           >
             {TRANSITIONS.map((t) => (
               <option key={t} value={t}>
@@ -381,7 +381,7 @@ export function ComposeForm({ artistId, tracks, hooks, clips }: Props) {
         <Section label="6 · Options">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <label className="block">
-              <span className="block text-xs uppercase tracking-[0.2em] text-neutral-500">
+              <span className="block text-xs uppercase tracking-[0.2em] text-brand-fg-faint">
                 Title override
               </span>
               <input
@@ -389,21 +389,21 @@ export function ComposeForm({ artistId, tracks, hooks, clips }: Props) {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="From track title"
-                className="mt-1 block w-full rounded-md border border-neutral-800 bg-neutral-900 px-2.5 py-1.5 text-sm text-neutral-100 focus:border-neutral-600 focus:outline-none"
+                className="mt-1 block w-full rounded-md border border-brand-rule bg-brand-bg-2 px-2.5 py-1.5 text-sm text-brand-fg focus:border-brand-accent focus:outline-none"
               />
             </label>
             <label className="block">
-              <span className="block text-xs uppercase tracking-[0.2em] text-neutral-500">CTA</span>
+              <span className="block text-xs uppercase tracking-[0.2em] text-brand-fg-faint">CTA</span>
               <input
                 type="text"
                 value={cta}
                 onChange={(e) => setCta(e.target.value)}
                 placeholder="illutible.com"
-                className="mt-1 block w-full rounded-md border border-neutral-800 bg-neutral-900 px-2.5 py-1.5 text-sm text-neutral-100 focus:border-neutral-600 focus:outline-none"
+                className="mt-1 block w-full rounded-md border border-brand-rule bg-brand-bg-2 px-2.5 py-1.5 text-sm text-brand-fg focus:border-brand-accent focus:outline-none"
               />
             </label>
             <label className="block">
-              <span className="block text-xs uppercase tracking-[0.2em] text-neutral-500">
+              <span className="block text-xs uppercase tracking-[0.2em] text-brand-fg-faint">
                 Slowmo (0.25–2)
               </span>
               <input
@@ -413,16 +413,16 @@ export function ComposeForm({ artistId, tracks, hooks, clips }: Props) {
                 step={0.25}
                 value={slowmo}
                 onChange={(e) => setSlowmo(Number(e.target.value))}
-                className="mt-1 block w-full rounded-md border border-neutral-800 bg-neutral-900 px-2.5 py-1.5 text-sm text-neutral-100 focus:border-neutral-600 focus:outline-none"
+                className="mt-1 block w-full rounded-md border border-brand-rule bg-brand-bg-2 px-2.5 py-1.5 text-sm text-brand-fg focus:border-brand-accent focus:outline-none"
               />
             </label>
           </div>
-          <label className="mt-3 flex items-center gap-2 text-xs text-neutral-400">
+          <label className="mt-3 flex items-center gap-2 text-xs text-brand-fg-dim">
             <input
               type="checkbox"
               checked={noOverlays}
               onChange={(e) => setNoOverlays(e.target.checked)}
-              className="accent-neutral-100"
+              className="accent-brand-fg"
             />
             Skip brand overlays (clean footage only)
           </label>
@@ -432,7 +432,7 @@ export function ComposeForm({ artistId, tracks, hooks, clips }: Props) {
           <button
             type="submit"
             disabled={submitDisabled}
-            className="rounded-md bg-neutral-100 px-4 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:opacity-50"
+            className="rounded-md bg-brand-fg px-4 py-2 text-sm font-medium text-brand-bg transition hover:bg-brand-fg disabled:opacity-50"
           >
             {submitState.kind === 'submitting'
               ? 'Queuing…'
@@ -452,7 +452,7 @@ export function ComposeForm({ artistId, tracks, hooks, clips }: Props) {
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <section className="space-y-3">
-      <h2 className="text-xs font-medium uppercase tracking-[0.3em] text-neutral-500">{label}</h2>
+      <h2 className="text-xs font-medium uppercase tracking-[0.3em] text-brand-fg-faint">{label}</h2>
       {children}
     </section>
   )
@@ -460,11 +460,11 @@ function Section({ label, children }: { label: string; children: React.ReactNode
 
 function EmptyState({ message }: { message: string }) {
   return (
-    <div className="rounded-md border border-neutral-800 bg-neutral-900/40 p-6 text-sm text-neutral-300">
+    <div className="rounded-md border border-brand-rule bg-brand-bg-2 p-6 text-sm text-brand-fg-dim">
       <p>{message}</p>
       <Link
         href="/vault"
-        className="mt-3 inline-block rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-950 hover:bg-white"
+        className="mt-3 inline-block rounded-md bg-brand-fg px-3 py-1.5 text-xs font-medium text-brand-bg hover:bg-brand-fg"
       >
         Open vault
       </Link>
@@ -475,24 +475,24 @@ function EmptyState({ message }: { message: string }) {
 function RenderStatusPanel({ state }: { state: { renders: TrackedRender[] } }) {
   return (
     <section className="space-y-3">
-      <h2 className="text-xs font-medium uppercase tracking-[0.3em] text-neutral-500">
+      <h2 className="text-xs font-medium uppercase tracking-[0.3em] text-brand-fg-faint">
         Renders ({state.renders.length})
       </h2>
       <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {state.renders.map((r) => (
           <li
             key={r.renderId}
-            className="space-y-2 rounded-md border border-neutral-800 bg-neutral-900/40 p-3"
+            className="space-y-2 rounded-md border border-brand-rule bg-brand-bg-2 p-3"
           >
             <header className="flex items-center justify-between gap-2">
-              <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-neutral-500">
+              <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-brand-fg-faint">
                 {ASPECT_RATIO_CONFIGS[r.aspectRatio].label}
               </span>
               <StatusPill status={r.status} />
             </header>
             {r.status === 'ready' && r.outputUrl ? (
               <>
-                <div className="overflow-hidden rounded bg-neutral-950">
+                <div className="overflow-hidden rounded bg-brand-bg">
                   { }
                   <video
                     src={r.outputUrl}
@@ -506,7 +506,7 @@ function RenderStatusPanel({ state }: { state: { renders: TrackedRender[] } }) {
                   href={r.outputUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-block text-xs text-neutral-300 underline underline-offset-4 hover:text-neutral-100"
+                  className="inline-block text-xs text-brand-fg-dim underline underline-offset-4 hover:text-brand-fg"
                 >
                   Download MP4
                 </a>
@@ -514,7 +514,7 @@ function RenderStatusPanel({ state }: { state: { renders: TrackedRender[] } }) {
             ) : r.status === 'failed' ? (
               <p className="text-xs text-red-400">{r.error ?? 'Render failed.'}</p>
             ) : (
-              <p className="text-xs text-neutral-400">{r.status}…</p>
+              <p className="text-xs text-brand-fg-dim">{r.status}…</p>
             )}
           </li>
         ))}
@@ -541,7 +541,7 @@ function AspectThumb({ ratio, active }: { ratio: AspectRatio; active: boolean })
     >
       <span
         style={{ width: w, height: h }}
-        className={cn('block rounded-sm', active ? 'bg-neutral-100' : 'bg-neutral-700')}
+        className={cn('block rounded-sm', active ? 'bg-brand-fg' : 'bg-brand-bg-2')}
       />
     </span>
   )
@@ -553,7 +553,7 @@ function StatusPill({ status }: { status: RenderStatus }) {
       ? 'border-emerald-700/60 bg-emerald-950/40 text-emerald-200'
       : status === 'failed'
         ? 'border-red-700/60 bg-red-950/40 text-red-200'
-        : 'border-neutral-700 bg-neutral-900 text-neutral-300'
+        : 'border-brand-rule bg-brand-bg-2 text-brand-fg-dim'
   return (
     <span
       className={cn(

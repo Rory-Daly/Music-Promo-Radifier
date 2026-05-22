@@ -29,32 +29,32 @@ export default async function HomePage() {
   const renders = activeMembership ? await listRecentRenders(activeMembership.artist_id, 6) : []
 
   return (
-    <main className="min-h-screen bg-neutral-950 px-8 py-10 text-neutral-100">
+    <main className="min-h-screen bg-brand-bg px-8 py-10 text-brand-fg">
       <div className="mx-auto max-w-5xl space-y-10">
         <header className="flex items-center justify-between">
           <div>
-            <p className="font-mono text-xs uppercase tracking-[0.4em] text-neutral-500">Legatograph</p>
-            <h1 className="mt-1 text-3xl font-semibold tracking-tight">
+            <p className="font-mono text-xs uppercase tracking-[0.4em] text-brand-fg-faint">Legatograph</p>
+            <h1 className="mt-1 font-display text-3xl tracking-tight text-brand-fg">
               {activeMembership?.artists.name ?? 'Welcome'}
             </h1>
           </div>
           <div className="flex items-center gap-4 text-xs">
             <Link
               href="/compose"
-              className="rounded-md border border-neutral-800 px-3 py-1.5 font-medium text-neutral-200 transition hover:border-neutral-600 hover:text-white"
+              className="rounded-md border border-brand-rule px-3 py-1.5 font-medium text-brand-fg transition hover:border-brand-accent hover:text-brand-fg"
             >
               Compose
             </Link>
             <Link
               href="/vault"
-              className="rounded-md border border-neutral-800 px-3 py-1.5 font-medium text-neutral-200 transition hover:border-neutral-600 hover:text-white"
+              className="rounded-md border border-brand-rule px-3 py-1.5 font-medium text-brand-fg transition hover:border-brand-accent hover:text-brand-fg"
             >
               Vault
             </Link>
             <form action="/auth/sign-out" method="post">
               <button
                 type="submit"
-                className="font-medium text-neutral-400 underline-offset-4 hover:text-neutral-100 hover:underline"
+                className="font-medium text-brand-fg-dim underline-offset-4 hover:text-brand-fg hover:underline"
               >
                 Sign out
               </button>
@@ -63,7 +63,7 @@ export default async function HomePage() {
         </header>
 
         <section className="space-y-3">
-          <h2 className="text-xs font-medium uppercase tracking-[0.3em] text-neutral-500">Account</h2>
+          <h2 className="text-xs font-medium uppercase tracking-[0.3em] text-brand-fg-faint">Account</h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Stat label="Signed in as" value={user.email ?? '—'} />
             <Stat
@@ -76,21 +76,21 @@ export default async function HomePage() {
 
         <section className="space-y-3">
           <div className="flex items-baseline justify-between">
-            <h2 className="text-xs font-medium uppercase tracking-[0.3em] text-neutral-500">
+            <h2 className="text-xs font-medium uppercase tracking-[0.3em] text-brand-fg-faint">
               Recent reels
             </h2>
             {renders.length > 0 ? (
-              <span className="text-xs text-neutral-500">{renders.length} most recent</span>
+              <span className="text-xs text-brand-fg-faint">{renders.length} most recent</span>
             ) : null}
           </div>
           {renders.length === 0 ? (
-            <p className="text-sm text-neutral-400">
+            <p className="text-sm text-brand-fg-dim">
               No reels yet. Open{' '}
-              <Link href="/compose" className="underline underline-offset-2 hover:text-neutral-100">
+              <Link href="/compose" className="underline underline-offset-2 hover:text-brand-fg">
                 Compose
               </Link>{' '}
               to build one, or run{' '}
-              <code className="text-neutral-100">npm run reel:auto -- --artistId=…</code> from the
+              <code className="text-brand-fg">npm run reel:auto -- --artistId=…</code> from the
               CLI.
             </p>
           ) : (
@@ -105,10 +105,10 @@ export default async function HomePage() {
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-xs font-medium uppercase tracking-[0.3em] text-neutral-500">
+          <h2 className="text-xs font-medium uppercase tracking-[0.3em] text-brand-fg-faint">
             Next up
           </h2>
-          <ul className="space-y-2 text-sm text-neutral-300">
+          <ul className="space-y-2 text-sm text-brand-fg-dim">
             <li>
               Upload tracks and clips in the{' '}
               <Link href="/vault" className="underline underline-offset-2">
@@ -132,9 +132,9 @@ export default async function HomePage() {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md border border-neutral-800 bg-neutral-900/40 p-4">
-      <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-neutral-500">{label}</p>
-      <p className="mt-1 truncate text-sm text-neutral-100">{value}</p>
+    <div className="rounded-md border border-brand-rule bg-brand-bg-2 p-4">
+      <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-brand-fg-faint">{label}</p>
+      <p className="mt-1 truncate text-sm text-brand-fg">{value}</p>
     </div>
   )
 }
@@ -142,8 +142,8 @@ function Stat({ label, value }: { label: string; value: string }) {
 function RenderCard({ render }: { render: RenderRow }) {
   const ready = render.status === 'ready' && render.output_url
   return (
-    <div className="overflow-hidden rounded-md border border-neutral-800 bg-neutral-900/40">
-      <div className="aspect-[9/16] bg-neutral-950">
+    <div className="overflow-hidden rounded-md border border-brand-rule bg-brand-bg-2">
+      <div className="aspect-[9/16] bg-brand-bg">
         {ready ? (
            
           <video
@@ -154,7 +154,7 @@ function RenderCard({ render }: { render: RenderRow }) {
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center p-4 text-center">
-            <span className="text-xs uppercase tracking-[0.2em] text-neutral-500">
+            <span className="text-xs uppercase tracking-[0.2em] text-brand-fg-faint">
               {render.status}
               {render.error ? ` — ${render.error.slice(0, 60)}` : ''}
             </span>
@@ -162,10 +162,10 @@ function RenderCard({ render }: { render: RenderRow }) {
         )}
       </div>
       <div className="flex items-center justify-between gap-2 px-3 py-2 text-xs">
-        <span className="font-mono uppercase tracking-[0.2em] text-neutral-500">
+        <span className="font-mono uppercase tracking-[0.2em] text-brand-fg-faint">
           {render.aspect_ratio ?? 'reel'}
         </span>
-        <span className="text-neutral-500">
+        <span className="text-brand-fg-faint">
           <ClientDate value={render.created_at} />
         </span>
       </div>

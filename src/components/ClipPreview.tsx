@@ -62,7 +62,7 @@ export function ClipPreview({ clip }: { clip: ClipRow & { signedUrl?: string | n
 
   const label = clip.source === 'gdrive' ? 'thumbnail unavailable' : 'no preview'
   return (
-    <div className="flex h-full w-full items-center justify-center px-2 text-center text-[10px] uppercase tracking-[0.2em] text-neutral-600">
+    <div className="flex h-full w-full items-center justify-center px-2 text-center text-[10px] uppercase tracking-[0.2em] text-brand-fg-faint">
       {label}
     </div>
   )

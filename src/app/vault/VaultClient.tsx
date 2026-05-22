@@ -4,10 +4,12 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState, useTransition, type FormEvent } from 'react'
 import { ClientDate } from '@/components/ClientDate'
 import { ClipPreview } from '@/components/ClipPreview'
+import type { BrandKit } from '@/lib/brand-kit/schema'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import { uploadFileToStorage } from '@/lib/storage/browser-upload'
 import { cn } from '@/lib/utils'
 import type { ClipRow, TrackRow } from '@/lib/supabase/queries'
+import { BrandTab } from './BrandTab'
 
 const ALLOWED_AUDIO_EXT = new Set(['.wav', '.mp3', '.flac', '.aiff', '.aif', '.m4a', '.ogg'])
 const ALLOWED_VIDEO_EXT = new Set(['.mp4', '.mov', '.m4v', '.webm', '.avi', '.mkv'])
@@ -32,7 +34,7 @@ function formatBytes(n: number): string {
 export type SignedTrackRow = TrackRow & { signedUrl: string | null }
 export type SignedClipRow = ClipRow & { signedUrl: string | null }
 
-type Tab = 'tracks' | 'clips'
+type Tab = 'tracks' | 'clips' | 'brand'
 
 type UploadState =
   | { kind: 'idle' }
@@ -47,6 +49,7 @@ type Props = {
   initialClips: SignedClipRow[]
   driveOauthAvailable: boolean
   driveConnected: boolean
+  brandKit: BrandKit
 }
 
 export function VaultClient({
@@ -55,6 +58,7 @@ export function VaultClient({
   initialClips,
   driveOauthAvailable,
   driveConnected,
+  brandKit,
 }: Props) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -278,9 +282,10 @@ export function VaultClient({
 
   return (
     <div className="space-y-6">
-      <div role="tablist" className="flex gap-1 border-b border-neutral-800">
+      <div role="tablist" className="flex gap-1 border-b border-brand-rule">
         <TabButton active={tab === 'tracks'} onClick={() => setTab('tracks')} label="Tracks" count={initialTracks.length} />
         <TabButton active={tab === 'clips'} onClick={() => setTab('clips')} label="Clips" count={initialClips.length} />
+        <TabButton active={tab === 'brand'} onClick={() => setTab('brand')} label="Brand" />
       </div>
 
       {uploadState.kind === 'uploading' ? (
@@ -300,38 +305,38 @@ export function VaultClient({
         <section className="space-y-6" role="tabpanel" aria-label="Tracks">
           <form
             onSubmit={uploadTrack}
-            className="space-y-3 rounded-md border border-neutral-800 bg-neutral-900/40 p-4"
+            className="space-y-3 rounded-md border border-brand-rule bg-brand-bg-2 p-4"
           >
-            <h2 className="text-sm font-medium text-neutral-200">Upload a track</h2>
+            <h2 className="text-sm font-medium text-brand-fg">Upload a track</h2>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_220px_auto] sm:items-end">
               <label className="block">
-                <span className="block text-xs uppercase tracking-[0.2em] text-neutral-500">File</span>
+                <span className="block text-xs uppercase tracking-[0.2em] text-brand-fg-faint">File</span>
                 <input
                   type="file"
                   name="file"
                   accept="audio/*,.wav,.mp3,.flac,.aiff,.aif,.m4a,.ogg"
                   required
-                  className="mt-1 block w-full text-xs text-neutral-200 file:mr-3 file:rounded-md file:border file:border-neutral-700 file:bg-neutral-900 file:px-3 file:py-1.5 file:text-xs file:text-neutral-100 hover:file:border-neutral-500"
+                  className="mt-1 block w-full text-xs text-brand-fg file:mr-3 file:rounded-md file:border file:border-brand-rule file:bg-brand-bg-2 file:px-3 file:py-1.5 file:text-xs file:text-brand-fg hover:file:border-brand-accent"
                 />
               </label>
               <label className="block">
-                <span className="block text-xs uppercase tracking-[0.2em] text-neutral-500">Title (optional)</span>
+                <span className="block text-xs uppercase tracking-[0.2em] text-brand-fg-faint">Title (optional)</span>
                 <input
                   type="text"
                   name="title"
                   placeholder="Auto from filename"
-                  className="mt-1 block w-full rounded-md border border-neutral-800 bg-neutral-900 px-2.5 py-1.5 text-sm text-neutral-100 focus:border-neutral-600 focus:outline-none"
+                  className="mt-1 block w-full rounded-md border border-brand-rule bg-brand-bg-2 px-2.5 py-1.5 text-sm text-brand-fg focus:border-brand-accent focus:outline-none"
                 />
               </label>
               <button
                 type="submit"
                 disabled={uploadState.kind === 'uploading'}
-                className="rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:opacity-50"
+                className="rounded-md bg-brand-fg px-3 py-2 text-sm font-medium text-brand-bg transition hover:bg-brand-fg disabled:opacity-50"
               >
                 Upload
               </button>
             </div>
-            <p className="text-xs text-neutral-500">
+            <p className="text-xs text-brand-fg-faint">
               Hooks are auto-detected on upload and stored against the track.
             </p>
           </form>
@@ -348,12 +353,12 @@ export function VaultClient({
 
           <form
             onSubmit={importGdriveFolder}
-            className="space-y-3 rounded-md border border-neutral-800 bg-neutral-900/40 p-4"
+            className="space-y-3 rounded-md border border-brand-rule bg-brand-bg-2 p-4"
           >
-            <h2 className="text-sm font-medium text-neutral-200">Import from Google Drive</h2>
+            <h2 className="text-sm font-medium text-brand-fg">Import from Google Drive</h2>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
               <label className="block">
-                <span className="block text-xs uppercase tracking-[0.2em] text-neutral-500">
+                <span className="block text-xs uppercase tracking-[0.2em] text-brand-fg-faint">
                   Folder URL or ID
                 </span>
                 <input
@@ -361,18 +366,18 @@ export function VaultClient({
                   name="folder"
                   required
                   placeholder="https://drive.google.com/drive/folders/…"
-                  className="mt-1 block w-full rounded-md border border-neutral-800 bg-neutral-900 px-2.5 py-1.5 text-sm text-neutral-100 focus:border-neutral-600 focus:outline-none"
+                  className="mt-1 block w-full rounded-md border border-brand-rule bg-brand-bg-2 px-2.5 py-1.5 text-sm text-brand-fg focus:border-brand-accent focus:outline-none"
                 />
               </label>
               <button
                 type="submit"
                 disabled={uploadState.kind === 'importing'}
-                className="rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:opacity-50"
+                className="rounded-md bg-brand-fg px-3 py-2 text-sm font-medium text-brand-bg transition hover:bg-brand-fg disabled:opacity-50"
               >
                 Import
               </button>
             </div>
-            <p className="text-xs text-neutral-500">
+            <p className="text-xs text-brand-fg-faint">
               The folder must be shared as <strong>Anyone with the link</strong>. Drive IDs are
               stored in the clip — files stay in Drive and are streamed at render time.
             </p>
@@ -380,44 +385,46 @@ export function VaultClient({
 
           <form
             onSubmit={uploadClip}
-            className="space-y-3 rounded-md border border-neutral-800 bg-neutral-900/40 p-4"
+            className="space-y-3 rounded-md border border-brand-rule bg-brand-bg-2 p-4"
           >
-            <h2 className="text-sm font-medium text-neutral-200">Upload a clip</h2>
+            <h2 className="text-sm font-medium text-brand-fg">Upload a clip</h2>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_220px_auto] sm:items-end">
               <label className="block">
-                <span className="block text-xs uppercase tracking-[0.2em] text-neutral-500">File</span>
+                <span className="block text-xs uppercase tracking-[0.2em] text-brand-fg-faint">File</span>
                 <input
                   type="file"
                   name="file"
                   accept="video/*,.mp4,.mov,.m4v,.webm"
                   required
-                  className="mt-1 block w-full text-xs text-neutral-200 file:mr-3 file:rounded-md file:border file:border-neutral-700 file:bg-neutral-900 file:px-3 file:py-1.5 file:text-xs file:text-neutral-100 hover:file:border-neutral-500"
+                  className="mt-1 block w-full text-xs text-brand-fg file:mr-3 file:rounded-md file:border file:border-brand-rule file:bg-brand-bg-2 file:px-3 file:py-1.5 file:text-xs file:text-brand-fg hover:file:border-brand-accent"
                 />
               </label>
               <label className="block">
-                <span className="block text-xs uppercase tracking-[0.2em] text-neutral-500">Tags (comma-separated)</span>
+                <span className="block text-xs uppercase tracking-[0.2em] text-brand-fg-faint">Tags (comma-separated)</span>
                 <input
                   type="text"
                   name="tags"
                   placeholder="drone, dusk, beach"
-                  className="mt-1 block w-full rounded-md border border-neutral-800 bg-neutral-900 px-2.5 py-1.5 text-sm text-neutral-100 focus:border-neutral-600 focus:outline-none"
+                  className="mt-1 block w-full rounded-md border border-brand-rule bg-brand-bg-2 px-2.5 py-1.5 text-sm text-brand-fg focus:border-brand-accent focus:outline-none"
                 />
               </label>
               <button
                 type="submit"
                 disabled={uploadState.kind === 'uploading'}
-                className="rounded-md bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-950 transition hover:bg-white disabled:opacity-50"
+                className="rounded-md bg-brand-fg px-3 py-2 text-sm font-medium text-brand-bg transition hover:bg-brand-fg disabled:opacity-50"
               >
                 Upload
               </button>
             </div>
-            <p className="text-xs text-neutral-500">
+            <p className="text-xs text-brand-fg-faint">
               Clips become candidates for the composer&apos;s auto-selection.
             </p>
           </form>
           <ClipList clips={initialClips} />
         </section>
       )}
+
+      {tab === 'brand' ? <BrandTab artistId={artistId} brandKit={brandKit} /> : null}
     </div>
   )
 }
@@ -431,7 +438,7 @@ function TabButton({
   active: boolean
   onClick: () => void
   label: string
-  count: number
+  count?: number
 }) {
   return (
     <button
@@ -442,11 +449,14 @@ function TabButton({
       className={cn(
         '-mb-px border-b-2 px-3 py-2 text-sm transition',
         active
-          ? 'border-neutral-100 text-neutral-100'
-          : 'border-transparent text-neutral-500 hover:text-neutral-200',
+          ? 'border-brand-fg text-brand-fg'
+          : 'border-transparent text-brand-fg-faint hover:text-brand-fg',
       )}
     >
-      {label} <span className="text-xs text-neutral-500">({count})</span>
+      {label}
+      {typeof count === 'number' ? (
+        <span className="text-xs text-brand-fg-faint"> ({count})</span>
+      ) : null}
     </button>
   )
 }
@@ -466,12 +476,12 @@ function UploadProgress({
       : `Uploading ${filename} (${Math.round(pct)}%)`
   const indeterminate = stage === 'process'
   return (
-    <div role="status" className="space-y-2 rounded-md border border-neutral-700 bg-neutral-900/60 px-3 py-2 text-sm text-neutral-200">
+    <div role="status" className="space-y-2 rounded-md border border-brand-rule bg-brand-bg-2 px-3 py-2 text-sm text-brand-fg">
       <p>{label}</p>
-      <div className="h-1.5 w-full overflow-hidden rounded bg-neutral-800">
+      <div className="h-1.5 w-full overflow-hidden rounded bg-brand-bg-2">
         <div
           className={cn(
-            'h-full bg-neutral-100 transition-[width] duration-150',
+            'h-full bg-brand-fg transition-[width] duration-150',
             indeterminate && 'animate-pulse',
           )}
           style={{ width: indeterminate ? '100%' : `${Math.max(0, Math.min(100, pct))}%` }}
@@ -493,7 +503,7 @@ function Banner({
       ? 'border-emerald-700/60 bg-emerald-950/40 text-emerald-100'
       : tone === 'error'
         ? 'border-red-700/60 bg-red-950/40 text-red-100'
-        : 'border-neutral-700 bg-neutral-900/60 text-neutral-200'
+        : 'border-brand-rule bg-brand-bg-2 text-brand-fg'
   return (
     <div
       role="status"
@@ -509,15 +519,15 @@ function Banner({
 
 function TrackList({ tracks }: { tracks: SignedTrackRow[] }) {
   if (tracks.length === 0) {
-    return <p className="text-sm text-neutral-400">No tracks yet.</p>
+    return <p className="text-sm text-brand-fg-dim">No tracks yet.</p>
   }
   return (
-    <ul className="divide-y divide-neutral-800 rounded-md border border-neutral-800">
+    <ul className="divide-y divide-brand-rule rounded-md border border-brand-rule">
       {tracks.map((track) => (
         <li key={track.id} className="flex items-center justify-between gap-4 px-4 py-3">
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-neutral-100">{track.title}</p>
-            <p className="text-xs text-neutral-500">
+            <p className="truncate text-sm font-medium text-brand-fg">{track.title}</p>
+            <p className="text-xs text-brand-fg-faint">
               {track.duration_seconds ? formatSeconds(track.duration_seconds) : '—'}
               {track.bpm ? ` · ${track.bpm.toFixed(0)} BPM` : ''}
             </p>
@@ -531,7 +541,7 @@ function TrackList({ tracks }: { tracks: SignedTrackRow[] }) {
               />
             ) : null}
           </div>
-          <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.2em] text-neutral-500">
+          <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.2em] text-brand-fg-faint">
             <ClientDate value={track.created_at} mode="date" />
           </span>
         </li>
@@ -542,28 +552,28 @@ function TrackList({ tracks }: { tracks: SignedTrackRow[] }) {
 
 function ClipList({ clips }: { clips: SignedClipRow[] }) {
   if (clips.length === 0) {
-    return <p className="text-sm text-neutral-400">No clips yet.</p>
+    return <p className="text-sm text-brand-fg-dim">No clips yet.</p>
   }
   return (
     <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
       {clips.map((clip) => (
         <li
           key={clip.id}
-          className="overflow-hidden rounded-md border border-neutral-800 bg-neutral-900/40"
+          className="overflow-hidden rounded-md border border-brand-rule bg-brand-bg-2"
         >
-          <div className="relative aspect-[9/16] bg-neutral-950">
+          <div className="relative aspect-[9/16] bg-brand-bg">
             <ClipPreview clip={clip} />
             {clip.source === 'gdrive' ? (
-              <span className="absolute right-1 top-1 rounded-sm bg-neutral-950/80 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.15em] text-neutral-300">
+              <span className="absolute right-1 top-1 rounded-sm bg-brand-bg px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.15em] text-brand-fg-dim">
                 drive
               </span>
             ) : null}
           </div>
           <div className="space-y-1 px-2 py-1.5">
-            <p className="truncate text-xs text-neutral-200" title={clip.name ?? undefined}>
+            <p className="truncate text-xs text-brand-fg" title={clip.name ?? undefined}>
               {clip.name ?? '(unnamed)'}
             </p>
-            <div className="flex items-center justify-between text-[10px] text-neutral-500">
+            <div className="flex items-center justify-between text-[10px] text-brand-fg-faint">
               <span className="font-mono uppercase tracking-[0.2em]">
                 {clip.duration_seconds ? `${clip.duration_seconds.toFixed(1)}s` : '—'}
               </span>
@@ -590,24 +600,24 @@ function DriveConnection({
   const [busy, setBusy] = useState(false)
   if (!driveOauthAvailable) {
     return (
-      <div className="rounded-md border border-neutral-800 bg-neutral-900/40 px-4 py-3 text-xs text-neutral-400">
-        Sign-in with Google not configured. Set <code className="text-neutral-200">GOOGLE_OAUTH_CLIENT_ID</code> /{' '}
-        <code className="text-neutral-200">GOOGLE_OAUTH_CLIENT_SECRET</code> to allow private folders and bypass anonymous quotas.
+      <div className="rounded-md border border-brand-rule bg-brand-bg-2 px-4 py-3 text-xs text-brand-fg-dim">
+        Sign-in with Google not configured. Set <code className="text-brand-fg">GOOGLE_OAUTH_CLIENT_ID</code> /{' '}
+        <code className="text-brand-fg">GOOGLE_OAUTH_CLIENT_SECRET</code> to allow private folders and bypass anonymous quotas.
       </div>
     )
   }
   if (!driveConnected) {
     return (
-      <div className="flex items-center justify-between gap-3 rounded-md border border-neutral-700 bg-neutral-900/60 px-4 py-3 text-sm">
+      <div className="flex items-center justify-between gap-3 rounded-md border border-brand-rule bg-brand-bg-2 px-4 py-3 text-sm">
         <div>
-          <p className="text-neutral-100">Google Drive — not connected</p>
-          <p className="mt-0.5 text-xs text-neutral-500">
+          <p className="text-brand-fg">Google Drive — not connected</p>
+          <p className="mt-0.5 text-xs text-brand-fg-faint">
             Sign in once to import private folders and bypass per-file download quotas.
           </p>
         </div>
         <a
           href={`/api/integrations/google/start?artistId=${encodeURIComponent(artistId)}`}
-          className="rounded-md bg-neutral-100 px-3 py-1.5 text-xs font-medium text-neutral-950 hover:bg-white"
+          className="rounded-md bg-brand-fg px-3 py-1.5 text-xs font-medium text-brand-bg hover:bg-brand-fg"
         >
           Connect Google Drive
         </a>

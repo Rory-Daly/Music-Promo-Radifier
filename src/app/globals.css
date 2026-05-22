@@ -1,3 +1,16 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Brand font slots — wired in src/app/layout.tsx via next/font.
+   The brand kit's `fonts.body.family` etc. are documentation/UI hints;
+   the actual rendering pulls from these vars. */
+:root {
+  --brand-font-body: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
+  --brand-font-display: var(--font-special-elite), 'Courier New', monospace;
+  --brand-font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
+}
+
+body {
+  font-family: var(--brand-font-body);
+}

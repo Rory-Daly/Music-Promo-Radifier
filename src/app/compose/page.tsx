@@ -28,8 +28,8 @@ export default async function ComposePage() {
   }
   if (!activeMembership) {
     return (
-      <main className="min-h-screen bg-neutral-950 px-8 py-10 text-neutral-100">
-        <p className="text-sm text-neutral-400">No artist workspace found.</p>
+      <main className="min-h-screen bg-brand-bg px-8 py-10 text-brand-fg">
+        <p className="text-sm text-brand-fg-dim">No artist workspace found.</p>
       </main>
     )
   }
@@ -48,25 +48,25 @@ export default async function ComposePage() {
   const clipsWithUrls = clips.map((c, i) => ({ ...c, signedUrl: clipSignedUrls[i] }))
 
   return (
-    <main className="min-h-screen bg-neutral-950 px-8 py-10 text-neutral-100">
+    <main className="min-h-screen bg-brand-bg px-8 py-10 text-brand-fg">
       <div className="mx-auto max-w-4xl space-y-8">
         <header className="flex items-center justify-between">
           <div>
-            <p className="font-mono text-xs uppercase tracking-[0.4em] text-neutral-500">
+            <p className="font-mono text-xs uppercase tracking-[0.4em] text-brand-fg-faint">
               {activeMembership.artists.name} · Compose
             </p>
-            <h1 className="mt-1 text-3xl font-semibold tracking-tight">Build a reel</h1>
+            <h1 className="mt-1 font-display text-3xl tracking-tight">Build a reel</h1>
           </div>
           <div className="flex items-center gap-2 text-xs">
             <Link
               href="/vault"
-              className="rounded-md border border-neutral-800 px-3 py-1.5 font-medium text-neutral-200 transition hover:border-neutral-600 hover:text-white"
+              className="rounded-md border border-brand-rule px-3 py-1.5 font-medium text-brand-fg transition hover:border-brand-accent hover:text-brand-fg"
             >
               Vault
             </Link>
             <Link
               href="/"
-              className="rounded-md border border-neutral-800 px-3 py-1.5 font-medium text-neutral-200 transition hover:border-neutral-600 hover:text-white"
+              className="rounded-md border border-brand-rule px-3 py-1.5 font-medium text-brand-fg transition hover:border-brand-accent hover:text-brand-fg"
             >
               Dashboard
             </Link>
