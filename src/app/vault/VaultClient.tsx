@@ -342,7 +342,9 @@ export function VaultClient({
           </form>
           <TrackList tracks={initialTracks} />
         </section>
-      ) : (
+      ) : null}
+
+      {tab === 'clips' ? (
         <section className="space-y-6" role="tabpanel" aria-label="Clips">
           <DriveConnection
             artistId={artistId}
@@ -422,7 +424,7 @@ export function VaultClient({
           </form>
           <ClipList clips={initialClips} />
         </section>
-      )}
+      ) : null}
 
       {tab === 'brand' ? <BrandTab artistId={artistId} brandKit={brandKit} /> : null}
     </div>
