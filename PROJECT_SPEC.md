@@ -25,13 +25,13 @@ Track in → ten posts out, scheduled and published. The tool finds the most ree
 
 - [ ] **Multi-artist workspaces** — auth scoped to artists; one user can manage many artists; every asset belongs to an artist.
 - [ ] **Asset vault** — upload/import tracks (audio + artwork), import drone clips from Google Drive, tag clips by mood/location/time-of-day.
-- [ ] **Brand kit per artist** — fonts, colours, logo, smart-link template, default hashtag/caption presets. Pre-seeded with the illutible aesthetic for the primary artist.
+- [x] **Brand kit per artist** — fonts, colours, logo, smart-link template, default hashtag/caption presets. Pre-seeded with the illutible aesthetic for the primary artist. *(v1: viewer + JSON editor; structured field editors deferred.)*
 - [ ] **Hook detector** — given an uploaded audio file, surface the 3-5 most reel-worthy 15-30s sections using local audio analysis (FFmpeg → RMS energy curve → score by mean energy × contrast × position). **Note:** Spotify's Audio Analysis API (sections/beats/tempo) was originally planned as the primary path; it was deprecated for new apps in Nov 2024 and returns 403 for our app. See [docs/spotify.md](docs/spotify.md). Beat-aligned cutting (for the auto-cut composer) will need a separate local beat-tracker — likely [essentia.js](https://essentia.upf.edu/essentiajs.html) — added when we wire video rendering.
 - [ ] **Auto-cut composer (Remotion)** — given a chosen hook and a set of drone clips, render reel variants for IG Reel (9:16), IG Story (9:16), IG feed (1:1), TikTok (9:16), YouTube Short (9:16), and X/Threads (16:9 or 1:1). Cuts on beat. Overlays artwork, title card, smart-link CTA. Reusable templates so output stays brand-consistent across releases.
 - [ ] **Caption generator** — drafts platform-specific captions (TikTok punchy, IG vibe, YT SEO-friendly) using track metadata and brand kit voice. User edits + approves.
 - [ ] **Multi-platform publisher** — schedule or post to IG (Reels/Story/Feed), TikTok, YouTube Shorts, X, Threads, Facebook via Ayrshare. One approval, fans out. Per-artist account connections.
 - [ ] **Release campaign templates** — given a release date, autogenerate a calendar of 8-12 post slots across a 4-week window (tease, countdown, drop day, behind-scenes, alt cuts, follow-ups). User batch-approves drafts.
-- [ ] **Smart link generator** — single URL → all DSPs (linkfire-style). Per-track. Auto-included in captions/CTAs.
+- [x] **Smart link generator** — single URL → all DSPs (linkfire-style). Per-track. Public page at `/r/<artist>/<track>` fans out to Spotify/Apple/YouTube/Bandcamp/SoundCloud/Tidal/Deezer using the artist's `brand_kit.smart_link.dsps`. Track slugs auto-generated on upload.
 
 ### Out of scope (v2+)
 

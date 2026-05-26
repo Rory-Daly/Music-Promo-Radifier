@@ -62,6 +62,7 @@ export default async function VaultPage() {
     ? await isDriveConnected(activeMembership.artist_id)
     : false
   const brandKit = await loadBrandKit(activeMembership.artist_id)
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3030'
 
   return (
     <main className="min-h-screen bg-brand-bg px-8 py-10 text-brand-fg">
@@ -91,11 +92,13 @@ export default async function VaultPage() {
 
         <VaultClient
           artistId={activeMembership.artist_id}
+          artistSlug={activeMembership.artists.slug}
           initialTracks={tracksWithUrls}
           initialClips={clipsWithUrls}
           driveOauthAvailable={driveOauthAvailable}
           driveConnected={driveConnected}
           brandKit={brandKit}
+          appUrl={appUrl}
         />
       </div>
     </main>

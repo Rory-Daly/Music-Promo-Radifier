@@ -1,7 +1,9 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-const PUBLIC_PATHS = ['/sign-in', '/auth/callback', '/auth/sign-out']
+// `/r` is the public smart-link namespace at /r/<artist>/<track>; fans need
+// to land there without an auth wall.
+const PUBLIC_PATHS = ['/sign-in', '/auth/callback', '/auth/sign-out', '/r']
 
 export async function updateSession(request: NextRequest): Promise<NextResponse> {
   let response = NextResponse.next({ request })

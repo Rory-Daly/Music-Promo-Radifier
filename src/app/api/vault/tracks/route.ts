@@ -6,6 +6,7 @@ import { z } from 'zod'
 import { analyseLocalAudio, findTopHooks } from '@/lib/audio'
 import { createSupabaseAdminClient } from '@/lib/supabase/admin'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
+import { findAvailableTrackSlug } from '@/lib/tracks/slug'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
@@ -81,12 +82,15 @@ async function handle(request: NextRequest) {
     const curve = await analyseLocalAudio(localPath)
     durationSeconds = curve.durationSeconds
 
+    const slug = await findAvailableTrackSlug(supabase, artistId, title)
+
     const { data: track, error: insertError } = await supabase
       .from('tracks')
       .insert({
         id: trackId,
         artist_id: artistId,
         title,
+        slug,
         audio_url: `tracks/${path}`,
         duration_seconds: durationSeconds,
       })
@@ -111,7 +115,7 @@ async function handle(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { trackId, title, durationSeconds, hookCount },
+      { trackId, title, slug, durationSeconds, hookCount },
       { status: 201 },
     )
   } catch (e) {

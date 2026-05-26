@@ -45,20 +45,24 @@ type UploadState =
 
 type Props = {
   artistId: string
+  artistSlug: string
   initialTracks: SignedTrackRow[]
   initialClips: SignedClipRow[]
   driveOauthAvailable: boolean
   driveConnected: boolean
   brandKit: BrandKit
+  appUrl: string
 }
 
 export function VaultClient({
   artistId,
+  artistSlug,
   initialTracks,
   initialClips,
   driveOauthAvailable,
   driveConnected,
   brandKit,
+  appUrl,
 }: Props) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -340,7 +344,7 @@ export function VaultClient({
               Hooks are auto-detected on upload and stored against the track.
             </p>
           </form>
-          <TrackList tracks={initialTracks} />
+          <TrackList tracks={initialTracks} artistSlug={artistSlug} appUrl={appUrl} />
         </section>
       ) : null}
 
@@ -519,36 +523,79 @@ function Banner({
   )
 }
 
-function TrackList({ tracks }: { tracks: SignedTrackRow[] }) {
+function TrackList({
+  tracks,
+  artistSlug,
+  appUrl,
+}: {
+  tracks: SignedTrackRow[]
+  artistSlug: string
+  appUrl: string
+}) {
   if (tracks.length === 0) {
     return <p className="text-sm text-brand-fg-dim">No tracks yet.</p>
   }
   return (
     <ul className="divide-y divide-brand-rule rounded-md border border-brand-rule">
-      {tracks.map((track) => (
-        <li key={track.id} className="flex items-center justify-between gap-4 px-4 py-3">
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-brand-fg">{track.title}</p>
-            <p className="text-xs text-brand-fg-faint">
-              {track.duration_seconds ? formatSeconds(track.duration_seconds) : '—'}
-              {track.bpm ? ` · ${track.bpm.toFixed(0)} BPM` : ''}
-            </p>
-            {track.signedUrl ? (
-               
-              <audio
-                src={track.signedUrl}
-                controls
-                preload="metadata"
-                className="mt-2 h-8 w-full max-w-md"
-              />
-            ) : null}
-          </div>
-          <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.2em] text-brand-fg-faint">
-            <ClientDate value={track.created_at} mode="date" />
-          </span>
-        </li>
-      ))}
+      {tracks.map((track) => {
+        const smartLink = `${appUrl}/r/${artistSlug}/${track.slug}`
+        return (
+          <li key={track.id} className="flex items-center justify-between gap-4 px-4 py-3">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-brand-fg">{track.title}</p>
+              <p className="text-xs text-brand-fg-faint">
+                {track.duration_seconds ? formatSeconds(track.duration_seconds) : '—'}
+                {track.bpm ? ` · ${track.bpm.toFixed(0)} BPM` : ''}
+              </p>
+              {track.signedUrl ? (
+                <audio
+                  src={track.signedUrl}
+                  controls
+                  preload="metadata"
+                  className="mt-2 h-8 w-full max-w-md"
+                />
+              ) : null}
+              <SmartLinkCopy href={smartLink} />
+            </div>
+            <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.2em] text-brand-fg-faint">
+              <ClientDate value={track.created_at} mode="date" />
+            </span>
+          </li>
+        )
+      })}
     </ul>
+  )
+}
+
+function SmartLinkCopy({ href }: { href: string }) {
+  const [copied, setCopied] = useState(false)
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(href)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      // Clipboard API can fail in non-secure contexts; fall through silently.
+    }
+  }
+  return (
+    <div className="mt-2 flex items-center gap-2">
+      <a
+        href={href}
+        target="_blank"
+        rel="noreferrer"
+        className="truncate font-mono text-[10px] text-brand-fg-dim hover:text-brand-accent"
+      >
+        {href.replace(/^https?:\/\//, '')}
+      </a>
+      <button
+        type="button"
+        onClick={copy}
+        className="shrink-0 rounded border border-brand-rule px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.2em] text-brand-fg-faint transition hover:border-brand-accent hover:text-brand-fg"
+      >
+        {copied ? 'Copied' : 'Copy'}
+      </button>
+    </div>
   )
 }
 
