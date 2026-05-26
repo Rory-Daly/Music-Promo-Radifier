@@ -344,6 +344,16 @@ export function VaultClient({
               Hooks are auto-detected on upload and stored against the track.
             </p>
           </form>
+
+          <SoundCloudTrackForm
+            artistId={artistId}
+            onResult={(r) => {
+              setUploadState(r)
+              if (r.kind === 'success') startTransition(() => router.refresh())
+            }}
+            disabled={uploadState.kind === 'uploading' || uploadState.kind === 'importing'}
+          />
+
           <TrackList tracks={initialTracks} artistSlug={artistSlug} appUrl={appUrl} />
         </section>
       ) : null}
@@ -523,6 +533,107 @@ function Banner({
   )
 }
 
+function SoundCloudTrackForm({
+  artistId,
+  onResult,
+  disabled,
+}: {
+  artistId: string
+  onResult: (state: UploadState) => void
+  disabled: boolean
+}) {
+  const [submitting, setSubmitting] = useState(false)
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = event.currentTarget
+    const data = new FormData(form)
+    const url = String(data.get('url') ?? '').trim()
+    const title = String(data.get('title') ?? '').trim()
+    if (!url) {
+      onResult({ kind: 'error', message: 'Paste a SoundCloud URL first.' })
+      return
+    }
+    if (!title) {
+      onResult({ kind: 'error', message: 'Add a title — pulled from the SoundCloud page is fine.' })
+      return
+    }
+    setSubmitting(true)
+    try {
+      const res = await fetch('/api/vault/tracks/soundcloud', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ artistId, trackId: crypto.randomUUID(), url, title }),
+      })
+      const body = (await res.json().catch(() => null)) as
+        | { error?: string; slug?: string }
+        | null
+      if (!res.ok) {
+        onResult({ kind: 'error', message: body?.error ?? `Add failed (${res.status})` })
+        return
+      }
+      onResult({ kind: 'success', message: `Added ${title}` })
+      form.reset()
+    } catch (e) {
+      onResult({
+        kind: 'error',
+        message: e instanceof Error ? e.message : 'Add failed',
+      })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <form
+      onSubmit={submit}
+      className="space-y-3 rounded-md border border-brand-rule bg-brand-bg-2 p-4"
+    >
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-sm font-medium text-brand-fg">Add from SoundCloud</h2>
+        <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-brand-fg-faint">
+          no audio upload · no hook detection
+        </span>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_220px_auto] sm:items-end">
+        <label className="block">
+          <span className="block text-xs uppercase tracking-[0.2em] text-brand-fg-faint">
+            SoundCloud URL
+          </span>
+          <input
+            type="url"
+            name="url"
+            required
+            placeholder="https://soundcloud.com/illutible/…"
+            className="mt-1 block w-full rounded-md border border-brand-rule bg-brand-bg-2 px-2.5 py-1.5 text-sm text-brand-fg focus:border-brand-accent focus:outline-none"
+          />
+        </label>
+        <label className="block">
+          <span className="block text-xs uppercase tracking-[0.2em] text-brand-fg-faint">Title</span>
+          <input
+            type="text"
+            name="title"
+            required
+            placeholder="e.g. Playing for Keeps"
+            className="mt-1 block w-full rounded-md border border-brand-rule bg-brand-bg-2 px-2.5 py-1.5 text-sm text-brand-fg focus:border-brand-accent focus:outline-none"
+          />
+        </label>
+        <button
+          type="submit"
+          disabled={disabled || submitting}
+          className="rounded-md border border-brand-accent bg-brand-accent px-3 py-2 text-sm font-medium text-brand-bg transition disabled:opacity-50"
+        >
+          {submitting ? 'Adding…' : 'Add'}
+        </button>
+      </div>
+      <p className="text-xs text-brand-fg-faint">
+        Use this for tracks that already live on SoundCloud — gets the smart-link URL without
+        re-hosting audio. Compose / render features need an uploaded file.
+      </p>
+    </form>
+  )
+}
+
 function TrackList({
   tracks,
   artistSlug,
@@ -542,7 +653,19 @@ function TrackList({
         return (
           <li key={track.id} className="flex items-center justify-between gap-4 px-4 py-3">
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-brand-fg">{track.title}</p>
+              <div className="flex items-center gap-2">
+                <p className="truncate text-sm font-medium text-brand-fg">{track.title}</p>
+                <span
+                  className={cn(
+                    'shrink-0 rounded border px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.2em]',
+                    track.source === 'soundcloud'
+                      ? 'border-brand-accent text-brand-accent'
+                      : 'border-brand-rule text-brand-fg-faint',
+                  )}
+                >
+                  {track.source}
+                </span>
+              </div>
               <p className="text-xs text-brand-fg-faint">
                 {track.duration_seconds ? formatSeconds(track.duration_seconds) : '—'}
                 {track.bpm ? ` · ${track.bpm.toFixed(0)} BPM` : ''}

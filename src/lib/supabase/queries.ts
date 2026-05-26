@@ -97,6 +97,8 @@ export type TrackRow = {
   artist_id: string
   title: string
   slug: string
+  source: 'upload' | 'soundcloud'
+  external_url: string | null
   audio_url: string | null
   duration_seconds: number | null
   bpm: number | null
@@ -107,7 +109,9 @@ export async function listTracks(artistId: string): Promise<TrackRow[]> {
   const supabase = await createSupabaseServerClient()
   const { data, error } = await supabase
     .from('tracks')
-    .select('id, artist_id, title, slug, audio_url, duration_seconds, bpm, created_at')
+    .select(
+      'id, artist_id, title, slug, source, external_url, audio_url, duration_seconds, bpm, created_at',
+    )
     .eq('artist_id', artistId)
     .order('created_at', { ascending: false })
   if (error) {

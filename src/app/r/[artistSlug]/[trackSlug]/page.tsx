@@ -4,6 +4,7 @@ import { brandColourVars } from '@/lib/brand-kit/css'
 import { defaultBrandKit } from '@/lib/brand-kit/defaults'
 import { brandKitSchema, type BrandKit, type Dsp } from '@/lib/brand-kit/schema'
 import { createSupabaseAdminClient } from '@/lib/supabase/admin'
+import { soundCloudPlayerUrl } from '@/lib/tracks/soundcloud'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +16,8 @@ type LookupResult = {
   artistName: string
   artistTagline: string | null
   trackTitle: string
+  trackSource: 'upload' | 'soundcloud'
+  trackExternalUrl: string | null
   brandKit: BrandKit
 }
 
@@ -29,10 +32,14 @@ async function lookup(artistSlug: string, trackSlug: string): Promise<LookupResu
 
   const { data: track } = await admin
     .from('tracks')
-    .select('title')
+    .select('title, source, external_url')
     .eq('artist_id', artist.id)
     .eq('slug', trackSlug)
-    .maybeSingle()
+    .maybeSingle<{
+      title: string
+      source: 'upload' | 'soundcloud'
+      external_url: string | null
+    }>()
   if (!track) return null
 
   const parsed = brandKitSchema.safeParse(artist.brand_kit)
@@ -41,6 +48,8 @@ async function lookup(artistSlug: string, trackSlug: string): Promise<LookupResu
     artistName: artist.name,
     artistTagline: brandKit.tagline,
     trackTitle: track.title,
+    trackSource: track.source,
+    trackExternalUrl: track.external_url,
     brandKit,
   }
 }
@@ -60,8 +69,13 @@ export default async function SmartLinkPage({ params }: PageProps) {
   const result = await lookup(artistSlug, trackSlug)
   if (!result) notFound()
 
-  const { artistName, artistTagline, trackTitle, brandKit } = result
+  const { artistName, artistTagline, trackTitle, trackSource, trackExternalUrl, brandKit } =
+    result
   const dsps = brandKit.smart_link.dsps.filter((d) => d.url.length > 0)
+  const playerUrl =
+    trackSource === 'soundcloud' && trackExternalUrl
+      ? soundCloudPlayerUrl(trackExternalUrl)
+      : null
 
   return (
     <main
@@ -80,6 +94,16 @@ export default async function SmartLinkPage({ params }: PageProps) {
             <p className="text-sm text-brand-fg-dim">{artistTagline}</p>
           ) : null}
         </header>
+
+        {playerUrl ? (
+          <iframe
+            title={`${trackTitle} on SoundCloud`}
+            src={playerUrl}
+            allow="autoplay"
+            loading="lazy"
+            className="h-[166px] w-full rounded-md border border-brand-rule bg-brand-bg-2"
+          />
+        ) : null}
 
         {dsps.length > 0 ? (
           <ul className="flex flex-col gap-2">
