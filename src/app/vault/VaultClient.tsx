@@ -592,7 +592,7 @@ function SoundCloudTrackForm({
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="text-sm font-medium text-brand-fg">Add from SoundCloud</h2>
         <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-brand-fg-faint">
-          no audio upload · no hook detection
+          fetches audio · ~30-60s
         </span>
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_220px_auto] sm:items-end">
@@ -627,8 +627,9 @@ function SoundCloudTrackForm({
         </button>
       </div>
       <p className="text-xs text-brand-fg-faint">
-        Use this for tracks that already live on SoundCloud — gets the smart-link URL without
-        re-hosting audio. Compose / render features need an uploaded file.
+        Server downloads the audio via yt-dlp, runs hook detection, and stores the file so
+        compose and render work the same as a manual upload. The smart-link page embeds the
+        SoundCloud player.
       </p>
     </form>
   )

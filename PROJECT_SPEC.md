@@ -256,6 +256,7 @@ All inputs validated with Zod (per project conventions).
 | Audio analysis | Local: FFmpeg → RMS energy curve. Beat tracking later via essentia.js (WASM). | Spotify Audio Analysis deprecated for new apps Nov 2024 (returns 403 — see docs/spotify.md). Local analysis is the only viable path. |
 | Social publishing | [Ayrshare](https://www.ayrshare.com) | One API for IG/TikTok/YT Shorts/X/Threads/FB; avoids fighting six native APIs and their review processes. |
 | Google Drive | Google Drive API v3 | Direct import of drone footage without manual download/upload. |
+| SoundCloud ingestion | [yt-dlp](https://github.com/yt-dlp/yt-dlp) CLI shelled out from `/api/vault/tracks/soundcloud` | SoundCloud's official API is closed to new app registrations. yt-dlp is the only reliable path to fetch audio from a public SoundCloud URL. Install: `brew install yt-dlp` on macOS; package manager or the standalone binary on Linux/Vercel. |
 | Smart links | Self-hosted (simple per-DSP redirect) or [Linkfire](https://www.linkfire.com)/[Songwhip](https://songwhip.com) | Start self-hosted; switch if it becomes a maintenance burden. |
 | Deployment | Vercel | Per template. |
 | Background jobs | Vercel cron + Supabase queue table | Renders, scheduled posts, Drive sync. Upgrade to dedicated worker (Inngest/Trigger.dev) only if needed. |
