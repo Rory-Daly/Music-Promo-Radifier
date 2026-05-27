@@ -211,6 +211,11 @@ export async function composeReel(opts: ComposeReelOptions): Promise<ComposeReel
       composition,
       serveUrl: bundleLocation,
       codec: 'h264',
+      // CRF 23 is the standard web sweet spot — visually lossless for the
+      // resolutions we target (1080×1920 etc.) but ~5× smaller than the
+      // Remotion default of CRF ~18, which was producing >1 GB files for
+      // even short reels and tripping the renders bucket cap.
+      crf: 23,
       outputLocation: outputAbs,
       inputProps,
       onProgress: ({ progress: p }) => {
