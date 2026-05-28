@@ -9,6 +9,16 @@
 
 export const DRIVE_OAUTH_SCOPE = 'https://www.googleapis.com/auth/drive.readonly'
 
+// youtube.upload is the narrowest scope that allows publishing videos.
+// youtube.readonly is required to look up the artist's channel after
+// connection (so we can show "Connected to <channel>" in the UI and
+// confirm uploads land on the right channel when the user is signed in
+// to multiple).
+export const YOUTUBE_OAUTH_SCOPES = [
+  'https://www.googleapis.com/auth/youtube.upload',
+  'https://www.googleapis.com/auth/youtube.readonly',
+].join(' ')
+
 const AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth'
 const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token'
 const REVOKE_ENDPOINT = 'https://oauth2.googleapis.com/revoke'

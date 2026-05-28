@@ -6,9 +6,20 @@ import { createSupabaseServerClient } from '@/lib/supabase/server'
 
 export const runtime = 'nodejs'
 
-function back(origin: string, returnTo: string, status: 'success' | 'error', message?: string) {
+function back(
+  origin: string,
+  returnTo: string,
+  status: 'success' | 'error',
+  provider: 'google_drive' | 'youtube',
+  message?: string,
+) {
   const url = new URL(returnTo, origin)
-  url.searchParams.set('drive', status)
+  // Older flows query for `drive=success|error`; keep that param name so
+  // existing UI listeners on the vault page don't break. Add a generic
+  // `oauth` param too so the YouTube banner can react to the same flow.
+  if (provider === 'google_drive') url.searchParams.set('drive', status)
+  url.searchParams.set('oauth', status)
+  url.searchParams.set('oauth_provider', provider)
   if (message) url.searchParams.set('msg', message)
   return NextResponse.redirect(url)
 }
@@ -21,15 +32,18 @@ export async function GET(request: NextRequest) {
 
   const rawCookie = request.cookies.get(OAUTH_COOKIE_NAME)?.value
   if (!rawCookie) {
-    return back(origin, '/vault', 'error', 'OAuth session expired. Try connecting again.')
+    return back(origin, '/vault', 'error', 'google_drive', 'OAuth session expired. Try connecting again.')
   }
   let payload: OAuthCookiePayload
   try {
     payload = JSON.parse(rawCookie) as OAuthCookiePayload
   } catch {
-    return back(origin, '/vault', 'error', 'Invalid OAuth cookie.')
+    return back(origin, '/vault', 'error', 'google_drive', 'Invalid OAuth cookie.')
   }
   const returnTo = payload.returnTo || '/vault'
+  // Cookies written before the YouTube integration shipped omit `provider`;
+  // default to drive so legacy in-flight flows keep working.
+  const provider = payload.provider ?? 'google_drive'
 
   // Clear the cookie regardless of outcome so it can't be replayed.
   const clearCookie = (res: NextResponse): NextResponse => {
@@ -44,18 +58,18 @@ export async function GET(request: NextRequest) {
   }
 
   if (errorParam) {
-    return clearCookie(back(origin, returnTo, 'error', errorParam))
+    return clearCookie(back(origin, returnTo, 'error', provider, errorParam))
   }
   if (!code || !stateParam) {
-    return clearCookie(back(origin, returnTo, 'error', 'Missing code or state.'))
+    return clearCookie(back(origin, returnTo, 'error', provider, 'Missing code or state.'))
   }
   if (stateParam !== payload.state) {
-    return clearCookie(back(origin, returnTo, 'error', 'State mismatch.'))
+    return clearCookie(back(origin, returnTo, 'error', provider, 'State mismatch.'))
   }
 
   const oauth = readOAuthClientFromEnv()
   if (!oauth) {
-    return clearCookie(back(origin, returnTo, 'error', 'OAuth client not configured on server.'))
+    return clearCookie(back(origin, returnTo, 'error', provider, 'OAuth client not configured on server.'))
   }
 
   const supabase = await createSupabaseServerClient()
@@ -73,7 +87,7 @@ export async function GET(request: NextRequest) {
     .eq('user_id', user.id)
     .maybeSingle()
   if (!membership) {
-    return clearCookie(back(origin, returnTo, 'error', 'Not a member of this artist.'))
+    return clearCookie(back(origin, returnTo, 'error', provider, 'Not a member of this artist.'))
   }
 
   const redirectUri = `${origin}/api/integrations/google/callback`
@@ -87,7 +101,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e)
-    return clearCookie(back(origin, returnTo, 'error', message.slice(0, 200)))
+    return clearCookie(back(origin, returnTo, 'error', provider, message.slice(0, 200)))
   }
   if (!tokens.refreshToken) {
     return clearCookie(
@@ -95,6 +109,7 @@ export async function GET(request: NextRequest) {
         origin,
         returnTo,
         'error',
+        provider,
         'Google did not return a refresh token. Revoke the app on your Google Account → Security → "Apps with access" and reconnect.',
       ),
     )
@@ -105,7 +120,7 @@ export async function GET(request: NextRequest) {
   const { error: upsertError } = await admin.from('artist_integrations').upsert(
     {
       artist_id: payload.artistId,
-      provider: 'google_drive',
+      provider,
       access_token: tokens.accessToken,
       refresh_token: tokens.refreshToken,
       expires_at: expiresAt.toISOString(),
@@ -115,8 +130,8 @@ export async function GET(request: NextRequest) {
     { onConflict: 'artist_id,provider' },
   )
   if (upsertError) {
-    return clearCookie(back(origin, returnTo, 'error', `Storing tokens failed: ${upsertError.message}`))
+    return clearCookie(back(origin, returnTo, 'error', provider, `Storing tokens failed: ${upsertError.message}`))
   }
 
-  return clearCookie(back(origin, returnTo, 'success'))
+  return clearCookie(back(origin, returnTo, 'success', provider))
 }

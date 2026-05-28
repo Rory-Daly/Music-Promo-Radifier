@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
+import { isYouTubeConnected } from '@/lib/oauth/youtube-tokens'
 import {
   ensureFirstArtist,
   getCurrentUserAndArtists,
@@ -31,6 +32,7 @@ export default async function PostsPage() {
   }
 
   const posts = await listPosts(activeMembership.artist_id)
+  const youtubeConnected = await isYouTubeConnected(activeMembership.artist_id)
 
   return (
     <main className="min-h-screen bg-brand-bg px-8 py-10 text-brand-fg">
@@ -64,7 +66,11 @@ export default async function PostsPage() {
           </div>
         </header>
 
-        <PostsClient initialPosts={posts} />
+        <PostsClient
+          initialPosts={posts}
+          artistId={activeMembership.artist_id}
+          youtubeConnected={youtubeConnected}
+        />
       </div>
     </main>
   )

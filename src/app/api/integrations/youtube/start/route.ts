@@ -2,7 +2,11 @@ import { randomBytes } from 'node:crypto'
 import { NextResponse, type NextRequest } from 'next/server'
 import { z } from 'zod'
 import { OAUTH_COOKIE_NAME, OAUTH_COOKIE_MAX_AGE_SECONDS } from '@/lib/oauth/cookie'
-import { buildAuthUrl, readOAuthClientFromEnv } from '@/lib/oauth/google'
+import {
+  buildAuthUrl,
+  readOAuthClientFromEnv,
+  YOUTUBE_OAUTH_SCOPES,
+} from '@/lib/oauth/google'
 import { createSupabaseServerClient } from '@/lib/supabase/server'
 
 export const runtime = 'nodejs'
@@ -12,13 +16,24 @@ const querySchema = z.object({
   returnTo: z.string().max(200).optional(),
 })
 
+/**
+ * Initiates the YouTube OAuth flow. Reuses the shared
+ * /api/integrations/google/callback handler — the only difference vs.
+ * the Drive `start` route is the requested scope and the `provider`
+ * field in the state cookie, which the callback reads to decide which
+ * `artist_integrations` row to upsert.
+ *
+ * Important: the same redirect_uri (`/api/integrations/google/callback`)
+ * is used for Drive and YouTube. Make sure that URI is registered in the
+ * Google Cloud OAuth Client config for whatever domain you're running on.
+ */
 export async function GET(request: NextRequest) {
   const oauth = readOAuthClientFromEnv()
   if (!oauth) {
     return NextResponse.json(
       {
         error:
-          'GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET are not set on the server. See docs/gdrive.md.',
+          'GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET are not set on the server.',
         code: 'missing_env',
       },
       { status: 500 },
@@ -30,7 +45,7 @@ export async function GET(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) {
-    return NextResponse.redirect(new URL('/sign-in?next=/vault', request.url))
+    return NextResponse.redirect(new URL('/sign-in?next=/posts', request.url))
   }
 
   const params = querySchema.safeParse(
@@ -61,8 +76,8 @@ export async function GET(request: NextRequest) {
   const cookieValue = JSON.stringify({
     state,
     artistId,
-    returnTo: returnTo ?? '/vault',
-    provider: 'google_drive',
+    returnTo: returnTo ?? '/posts',
+    provider: 'youtube',
   })
   const origin = new URL(request.url).origin
   const redirectUri = `${origin}/api/integrations/google/callback`
@@ -71,6 +86,7 @@ export async function GET(request: NextRequest) {
     clientId: oauth.clientId,
     redirectUri,
     state,
+    scope: YOUTUBE_OAUTH_SCOPES,
   })
 
   const response = NextResponse.redirect(authorizeUrl)

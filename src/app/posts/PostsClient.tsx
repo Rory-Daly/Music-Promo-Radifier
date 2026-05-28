@@ -27,9 +27,11 @@ const STATUS_LABEL: Record<PostStatus, string> = {
 
 type Props = {
   initialPosts: PostRow[]
+  artistId: string
+  youtubeConnected: boolean
 }
 
-export function PostsClient({ initialPosts }: Props) {
+export function PostsClient({ initialPosts, artistId, youtubeConnected }: Props) {
   const router = useRouter()
   const [, startTransition] = useTransition()
   const [busy, setBusy] = useState<string | null>(null)
@@ -109,22 +111,73 @@ export function PostsClient({ initialPosts }: Props) {
     await call(`/api/posts/${post.id}`, { method: 'DELETE' }, 'Deleted', post.id)
   }
 
+  async function publish(post: PostRow) {
+    await call(
+      `/api/posts/${post.id}/publish`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      },
+      'Published',
+      post.id,
+    )
+  }
+
+  async function disconnectYouTube() {
+    setBusy('youtube_disconnect')
+    setBanner(null)
+    try {
+      const res = await fetch('/api/integrations/youtube/disconnect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ artistId }),
+      })
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null
+        setBanner({
+          kind: 'error',
+          message: body?.error ?? `Disconnect failed (${res.status})`,
+        })
+        return
+      }
+      setBanner({ kind: 'success', message: 'YouTube disconnected' })
+      startTransition(() => router.refresh())
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const connectionBanner = (
+    <ConnectionsBanner
+      artistId={artistId}
+      youtubeConnected={youtubeConnected}
+      onDisconnectYouTube={disconnectYouTube}
+      busy={busy === 'youtube_disconnect'}
+    />
+  )
+
   if (initialPosts.length === 0) {
     return (
-      <section className="rounded-md border border-brand-rule bg-brand-bg-2 p-6 text-center">
-        <p className="text-sm text-brand-fg-dim">
-          No posts yet. Open{' '}
-          <a href="/compose" className="text-brand-fg underline-offset-2 hover:underline">
-            Compose
-          </a>{' '}
-          to draft a reel, generate captions, and save them here as drafts.
-        </p>
-      </section>
+      <div className="space-y-6">
+        {connectionBanner}
+        <section className="rounded-md border border-brand-rule bg-brand-bg-2 p-6 text-center">
+          <p className="text-sm text-brand-fg-dim">
+            No posts yet. Open{' '}
+            <a href="/compose" className="text-brand-fg underline-offset-2 hover:underline">
+              Compose
+            </a>{' '}
+            to draft a reel, generate captions, and save them here as drafts.
+          </p>
+        </section>
+      </div>
     )
   }
 
   return (
     <div className="space-y-8">
+      {connectionBanner}
+
       {banner ? (
         <p
           className={cn(
@@ -152,9 +205,11 @@ export function PostsClient({ initialPosts }: Props) {
                   <PostCard
                     post={p}
                     busy={busy === p.id}
+                    youtubeConnected={youtubeConnected}
                     onSaveCaption={(caption) => saveCaption(p, caption)}
                     onSchedule={(when) => schedule(p, when)}
                     onDelete={() => remove(p)}
+                    onPublish={() => publish(p)}
                   />
                 </li>
               ))}
@@ -169,15 +224,19 @@ export function PostsClient({ initialPosts }: Props) {
 function PostCard({
   post,
   busy,
+  youtubeConnected,
   onSaveCaption,
   onSchedule,
   onDelete,
+  onPublish,
 }: {
   post: PostRow
   busy: boolean
+  youtubeConnected: boolean
   onSaveCaption: (caption: string) => void | Promise<void>
   onSchedule: (when: string | null) => void | Promise<void>
   onDelete: () => void | Promise<void>
+  onPublish: () => void | Promise<void>
 }) {
   const [editing, setEditing] = useState(false)
   const [caption, setCaption] = useState(post.caption ?? '')
@@ -218,6 +277,12 @@ function PostCard({
             <ClientDate value={post.created_at} mode="date" />
           </p>
         </header>
+
+        {post.error && post.status === 'failed' ? (
+          <p className="rounded border border-brand-accent-2 bg-brand-bg px-2 py-1 font-mono text-[11px] text-brand-accent-2">
+            {post.error}
+          </p>
+        ) : null}
 
         {editing && !locked ? (
           <div className="space-y-2">
@@ -304,6 +369,27 @@ function PostCard({
               >
                 {post.status === 'scheduled' ? 'Update schedule' : 'Schedule'}
               </button>
+              {publishSupportedForPlatform(post.platform) ? (
+                <button
+                  type="button"
+                  disabled={
+                    busy ||
+                    !post.render_id ||
+                    (post.platform === 'yt_short' && !youtubeConnected)
+                  }
+                  onClick={onPublish}
+                  title={
+                    !post.render_id
+                      ? 'Attach a render before publishing'
+                      : post.platform === 'yt_short' && !youtubeConnected
+                        ? 'Connect YouTube above to enable publishing'
+                        : 'Publish to YouTube now'
+                  }
+                  className="rounded-md border border-brand-fg bg-brand-fg px-2.5 py-1 font-medium text-brand-bg transition disabled:opacity-50"
+                >
+                  {busy ? 'Publishing…' : 'Publish now'}
+                </button>
+              ) : null}
               <button
                 type="button"
                 disabled={busy}
@@ -333,6 +419,65 @@ function PostCard({
         )}
       </div>
     </article>
+  )
+}
+
+function publishSupportedForPlatform(platform: PostPlatform): boolean {
+  // Direct publishing is currently only wired for YouTube Shorts. Other
+  // platforms still rely on the "Copy caption" flow (manual upload).
+  return platform === 'yt_short'
+}
+
+function ConnectionsBanner({
+  artistId,
+  youtubeConnected,
+  onDisconnectYouTube,
+  busy,
+}: {
+  artistId: string
+  youtubeConnected: boolean
+  onDisconnectYouTube: () => void
+  busy: boolean
+}) {
+  return (
+    <section className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-brand-rule bg-brand-bg-2 px-4 py-3">
+      <div className="space-y-1">
+        <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-brand-fg-faint">
+          Publishing connections
+        </p>
+        <p className="text-sm text-brand-fg">
+          YouTube{' '}
+          {youtubeConnected ? (
+            <span className="font-medium text-brand-accent">Connected</span>
+          ) : (
+            <span className="text-brand-fg-dim">— not connected</span>
+          )}
+        </p>
+        <p className="text-xs text-brand-fg-faint">
+          IG / TikTok / X / Threads / Facebook publish manually — use the Copy buttons in the
+          post cards and paste into each app.
+        </p>
+      </div>
+      <div className="flex gap-2 text-xs">
+        {youtubeConnected ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onDisconnectYouTube}
+            className="rounded-md border border-brand-rule px-3 py-1.5 font-medium text-brand-fg-dim transition hover:text-brand-fg disabled:opacity-50"
+          >
+            {busy ? 'Disconnecting…' : 'Disconnect YouTube'}
+          </button>
+        ) : (
+          <a
+            href={`/api/integrations/youtube/start?artistId=${encodeURIComponent(artistId)}&returnTo=${encodeURIComponent('/posts')}`}
+            className="rounded-md border border-brand-accent bg-brand-accent px-3 py-1.5 font-medium text-brand-bg transition hover:opacity-90"
+          >
+            Connect YouTube
+          </a>
+        )}
+      </div>
+    </section>
   )
 }
 
