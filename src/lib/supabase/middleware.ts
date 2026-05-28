@@ -2,8 +2,18 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 // `/r` is the public smart-link namespace at /r/<artist>/<track>; fans need
-// to land there without an auth wall.
-const PUBLIC_PATHS = ['/sign-in', '/auth/callback', '/auth/sign-out', '/r']
+// to land there without an auth wall. `/api/cron` is invoked by Vercel Cron
+// (and any future scheduler) which authenticates via the CRON_SECRET bearer
+// token inside the route, not via Supabase Auth — so it has to bypass the
+// session redirect or the request gets 307'd to /sign-in before the route
+// handler runs.
+const PUBLIC_PATHS = [
+  '/sign-in',
+  '/auth/callback',
+  '/auth/sign-out',
+  '/r',
+  '/api/cron',
+]
 
 export async function updateSession(request: NextRequest): Promise<NextResponse> {
   let response = NextResponse.next({ request })
