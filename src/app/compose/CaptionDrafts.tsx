@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
 
@@ -12,6 +13,8 @@ type Platform =
   | 'x'
   | 'threads'
   | 'fb'
+
+type AspectRatio = '9x16' | '1x1' | '16x9' | '4x5'
 
 const PLATFORM_LABELS: Record<Platform, string> = {
   ig_reel: 'IG Reel',
@@ -26,6 +29,21 @@ const PLATFORM_LABELS: Record<Platform, string> = {
 
 const DEFAULT_PLATFORMS: Platform[] = ['ig_reel', 'tiktok', 'yt_short', 'x']
 
+// Aspect-ratio preference per platform. We try these in order against the
+// renders the user has queued in this compose session — the first match
+// wins. If none match, the post is saved without a render_id (still valid
+// as a draft).
+const PLATFORM_ASPECT_PREFERENCE: Record<Platform, AspectRatio[]> = {
+  ig_reel: ['9x16'],
+  ig_story: ['9x16'],
+  ig_feed: ['4x5', '1x1'],
+  tiktok: ['9x16'],
+  yt_short: ['9x16'],
+  x: ['1x1', '16x9'],
+  threads: ['1x1', '16x9'],
+  fb: ['16x9', '1x1', '4x5'],
+}
+
 type Draft = {
   platform: Platform
   caption: string
@@ -38,17 +56,33 @@ type DraftState =
   | { kind: 'success'; drafts: Draft[] }
   | { kind: 'error'; message: string }
 
+type SaveState =
+  | { kind: 'idle' }
+  | { kind: 'saving' }
+  | { kind: 'success'; count: number }
+  | { kind: 'error'; message: string }
+
+type ReadyRender = { renderId: string; aspectRatio: AspectRatio }
+
 type Props = {
   artistId: string
   trackId: string
   trackTitle: string
   disabled?: boolean
+  readyRenders?: ReadyRender[]
 }
 
-export function CaptionDrafts({ artistId, trackId, trackTitle, disabled }: Props) {
+export function CaptionDrafts({
+  artistId,
+  trackId,
+  trackTitle,
+  disabled,
+  readyRenders = [],
+}: Props) {
   const [selected, setSelected] = useState<Set<Platform>>(() => new Set(DEFAULT_PLATFORMS))
   const [contextHint, setContextHint] = useState('')
   const [state, setState] = useState<DraftState>({ kind: 'idle' })
+  const [saveState, setSaveState] = useState<SaveState>({ kind: 'idle' })
   const [copied, setCopied] = useState<Platform | null>(null)
 
   function togglePlatform(p: Platform) {
@@ -101,6 +135,49 @@ export function CaptionDrafts({ artistId, trackId, trackTitle, disabled }: Props
     } catch {
       // Clipboard API can fail in non-secure contexts; ignore silently.
     }
+  }
+
+  function pickRenderForPlatform(platform: Platform): string | null {
+    const preferences = PLATFORM_ASPECT_PREFERENCE[platform]
+    for (const ratio of preferences) {
+      const match = readyRenders.find((r) => r.aspectRatio === ratio)
+      if (match) return match.renderId
+    }
+    return null
+  }
+
+  async function saveAllAsDrafts(drafts: Draft[]) {
+    if (drafts.length === 0) return
+    setSaveState({ kind: 'saving' })
+    const results = await Promise.all(
+      drafts.map((d) =>
+        fetch('/api/posts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            artistId,
+            trackId,
+            renderId: pickRenderForPlatform(d.platform) ?? undefined,
+            platform: d.platform,
+            caption: d.caption,
+            hashtags: d.hashtags,
+          }),
+        }).then(async (res) => ({
+          ok: res.ok,
+          status: res.status,
+          body: (await res.json().catch(() => null)) as { error?: string } | null,
+        })),
+      ),
+    )
+    const failures = results.filter((r) => !r.ok)
+    if (failures.length > 0) {
+      setSaveState({
+        kind: 'error',
+        message: failures[0].body?.error ?? `Save failed (${failures[0].status})`,
+      })
+      return
+    }
+    setSaveState({ kind: 'success', count: drafts.length })
   }
 
   return (
@@ -165,33 +242,72 @@ export function CaptionDrafts({ artistId, trackId, trackTitle, disabled }: Props
       </div>
 
       {state.kind === 'success' && state.drafts.length > 0 ? (
-        <ul className="space-y-3">
-          {state.drafts.map((d) => {
-            const full = d.caption
-            return (
-              <li
-                key={d.platform}
-                className="rounded-md border border-brand-rule bg-brand-bg p-3"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-brand-fg-faint">
-                    {PLATFORM_LABELS[d.platform]} · {full.length} chars
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => copyDraft(d.platform, full)}
-                    className="rounded border border-brand-rule px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.2em] text-brand-fg-faint transition hover:border-brand-accent hover:text-brand-fg"
-                  >
-                    {copied === d.platform ? 'Copied' : 'Copy'}
-                  </button>
-                </div>
-                <pre className="mt-2 whitespace-pre-wrap break-words font-body text-sm text-brand-fg">
-                  {full}
-                </pre>
-              </li>
-            )
-          })}
-        </ul>
+        <>
+          <ul className="space-y-3">
+            {state.drafts.map((d) => {
+              const full = d.caption
+              const matchedRender = pickRenderForPlatform(d.platform)
+              return (
+                <li
+                  key={d.platform}
+                  className="rounded-md border border-brand-rule bg-brand-bg p-3"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-brand-fg-faint">
+                      {PLATFORM_LABELS[d.platform]} · {full.length} chars
+                      {matchedRender
+                        ? ' · render attached'
+                        : readyRenders.length > 0
+                          ? ' · no matching render'
+                          : ''}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => copyDraft(d.platform, full)}
+                      className="rounded border border-brand-rule px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-[0.2em] text-brand-fg-faint transition hover:border-brand-accent hover:text-brand-fg"
+                    >
+                      {copied === d.platform ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
+                  <pre className="mt-2 whitespace-pre-wrap break-words font-body text-sm text-brand-fg">
+                    {full}
+                  </pre>
+                </li>
+              )
+            })}
+          </ul>
+
+          <div className="flex items-center justify-between gap-2 border-t border-brand-rule pt-3 text-xs">
+            {saveState.kind === 'success' ? (
+              <p className="mr-auto text-brand-fg-dim">
+                Saved {saveState.count} draft post{saveState.count === 1 ? '' : 's'}.{' '}
+                <Link
+                  href="/posts"
+                  className="text-brand-fg underline-offset-2 hover:text-brand-accent hover:underline"
+                >
+                  Open Posts →
+                </Link>
+              </p>
+            ) : saveState.kind === 'error' ? (
+              <p className="mr-auto text-brand-accent-2">{saveState.message}</p>
+            ) : readyRenders.length === 0 ? (
+              <p className="mr-auto text-brand-fg-faint">
+                Queue a render first to auto-attach the right aspect ratio per platform. Drafts
+                can still be saved without one.
+              </p>
+            ) : (
+              <span />
+            )}
+            <button
+              type="button"
+              onClick={() => state.kind === 'success' && saveAllAsDrafts(state.drafts)}
+              disabled={saveState.kind === 'saving' || disabled}
+              className="rounded-md border border-brand-accent bg-brand-accent px-3 py-1.5 font-medium text-brand-bg transition disabled:opacity-50"
+            >
+              {saveState.kind === 'saving' ? 'Saving…' : 'Save all as drafts'}
+            </button>
+          </div>
+        </>
       ) : null}
     </section>
   )

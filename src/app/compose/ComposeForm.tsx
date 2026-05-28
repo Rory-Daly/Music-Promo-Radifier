@@ -452,6 +452,13 @@ export function ComposeForm({ artistId, tracks, hooks, clips }: Props) {
           artistId={artistId}
           trackId={selectedTrackId}
           trackTitle={tracks.find((t) => t.id === selectedTrackId)?.title ?? 'this track'}
+          readyRenders={
+            submitState.kind === 'tracking'
+              ? submitState.renders
+                  .filter((r) => r.status === 'ready')
+                  .map((r) => ({ renderId: r.renderId, aspectRatio: r.aspectRatio }))
+              : []
+          }
         />
       ) : null}
     </div>

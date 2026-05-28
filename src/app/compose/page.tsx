@@ -65,6 +65,12 @@ export default async function ComposePage() {
               Vault
             </Link>
             <Link
+              href="/posts"
+              className="rounded-md border border-brand-rule px-3 py-1.5 font-medium text-brand-fg transition hover:border-brand-accent hover:text-brand-fg"
+            >
+              Posts
+            </Link>
+            <Link
               href="/"
               className="rounded-md border border-brand-rule px-3 py-1.5 font-medium text-brand-fg transition hover:border-brand-accent hover:text-brand-fg"
             >

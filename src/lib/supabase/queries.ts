@@ -175,6 +175,97 @@ export async function listClips(artistId: string): Promise<ClipRow[]> {
   return (data ?? []) as ClipRow[]
 }
 
+export const POST_PLATFORMS = [
+  'ig_reel',
+  'ig_story',
+  'ig_feed',
+  'tiktok',
+  'yt_short',
+  'x',
+  'threads',
+  'fb',
+] as const
+export type PostPlatform = (typeof POST_PLATFORMS)[number]
+
+export type PostStatus = 'draft' | 'scheduled' | 'published' | 'failed'
+
+export type PostRow = {
+  id: string
+  artist_id: string
+  track_id: string | null
+  render_id: string | null
+  platform: PostPlatform
+  caption: string | null
+  hashtags: string[]
+  scheduled_for: string | null
+  status: PostStatus
+  permalink: string | null
+  error: string | null
+  created_at: string
+  updated_at: string
+  // Joined fields (nullable because the parent row may be missing)
+  track_title: string | null
+  render_output_url: string | null
+  render_aspect_ratio: string | null
+}
+
+type PostJoinRow = {
+  id: string
+  artist_id: string
+  track_id: string | null
+  render_id: string | null
+  platform: PostPlatform
+  caption: string | null
+  hashtags: string[] | null
+  scheduled_for: string | null
+  status: PostStatus
+  permalink: string | null
+  error: string | null
+  created_at: string
+  updated_at: string
+  tracks: { title: string } | null
+  renders: { output_url: string | null; aspect_ratio: string | null } | null
+}
+
+export async function listPosts(artistId: string): Promise<PostRow[]> {
+  const supabase = await createSupabaseServerClient()
+  const { data, error } = await supabase
+    .from('posts')
+    .select(
+      `id, artist_id, track_id, render_id, platform, caption, hashtags,
+       scheduled_for, status, permalink, error, created_at, updated_at,
+       tracks(title),
+       renders(output_url, aspect_ratio)`,
+    )
+    .eq('artist_id', artistId)
+    .order('created_at', { ascending: false })
+  if (error) {
+    console.error('Failed to load posts:', error.message)
+    return []
+  }
+  return (data ?? []).map((row) => {
+    const r = row as unknown as PostJoinRow
+    return {
+      id: r.id,
+      artist_id: r.artist_id,
+      track_id: r.track_id,
+      render_id: r.render_id,
+      platform: r.platform,
+      caption: r.caption,
+      hashtags: r.hashtags ?? [],
+      scheduled_for: r.scheduled_for,
+      status: r.status,
+      permalink: r.permalink,
+      error: r.error,
+      created_at: r.created_at,
+      updated_at: r.updated_at,
+      track_title: r.tracks?.title ?? null,
+      render_output_url: r.renders?.output_url ?? null,
+      render_aspect_ratio: r.renders?.aspect_ratio ?? null,
+    }
+  })
+}
+
 function slugify(value: string): string {
   return value
     .toLowerCase()
