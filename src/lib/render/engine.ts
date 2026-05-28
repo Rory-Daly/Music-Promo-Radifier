@@ -11,9 +11,17 @@ import { type AspectRatio } from '../../../scripts/remotion/aspect-ratios'
 import { type Transition } from '../../../scripts/remotion/transitions'
 import { downloadDriveFile, type DriveAuth } from '@/lib/gdrive'
 
-export type ClipRef =
-  | { source: 'supabase'; bucket: string; path: string }
-  | { source: 'gdrive'; fileId: string }
+type ClipRefBase = {
+  /** Clip row id — used to cache the detected horizon back to the DB. */
+  id?: string
+  /** Cached horizon Y ratio (0..1) from a prior render or backfill. */
+  horizonYRatio?: number | null
+}
+export type ClipRef = ClipRefBase &
+  (
+    | { source: 'supabase'; bucket: string; path: string }
+    | { source: 'gdrive'; fileId: string }
+  )
 
 export type RunRenderInput = {
   renderId: string
@@ -31,6 +39,11 @@ export type RunRenderInput = {
   aspectRatio?: AspectRatio
   transition?: Transition
   wordmarkPath?: string
+  audioFadeInSeconds?: number
+  audioFadeOutSeconds?: number
+  videoFadeInSeconds?: number
+  videoFadeOutSeconds?: number
+  outroTailSeconds?: number
   driveAuth?: DriveAuth | null
 }
 
@@ -78,6 +91,10 @@ export async function runRender(client: SupabaseClient, input: RunRenderInput): 
       clipLocalPaths.push(path)
     }
 
+    const cachedHorizons: (number | null)[] = input.clips.map((c) =>
+      typeof c.horizonYRatio === 'number' ? c.horizonYRatio : null,
+    )
+
     const outputPath = join(workDir, `output.mp4`)
     const result = await composeReel({
       audioPath: audioLocalPath,
@@ -93,7 +110,20 @@ export async function runRender(client: SupabaseClient, input: RunRenderInput): 
       aspectRatio: input.aspectRatio,
       transition: input.transition,
       wordmarkPath: input.wordmarkPath,
+      audioFadeInSeconds: input.audioFadeInSeconds,
+      audioFadeOutSeconds: input.audioFadeOutSeconds,
+      videoFadeInSeconds: input.videoFadeInSeconds,
+      videoFadeOutSeconds: input.videoFadeOutSeconds,
+      outroTailSeconds: input.outroTailSeconds,
+      clipHorizonRatios: cachedHorizons,
     })
+
+    // Persist any newly-detected horizons back to the clips table so
+    // the next render with the same clip uses the cache. Best-effort —
+    // failures here don't fail the render.
+    if (result.clipHorizonRatios) {
+      await persistHorizonRatios(client, input.clips, cachedHorizons, result.clipHorizonRatios)
+    }
 
     const upload = await uploadRenderOutput(client, {
       artistId: input.artistId,
@@ -156,4 +186,37 @@ async function downloadDriveObjectToFile(
 function readApiKeyAuthFromEnv(): DriveAuth | null {
   const key = process.env.GOOGLE_API_KEY
   return key ? { kind: 'apiKey', apiKey: key } : null
+}
+
+/**
+ * Best-effort: writes any newly-detected horizon_y_ratio values back to
+ * the clips table. Skips entries that were either already cached or
+ * couldn't be detected (null). Failures are swallowed — the render
+ * succeeded, and the next render will just re-detect.
+ */
+async function persistHorizonRatios(
+  client: SupabaseClient,
+  clips: ClipRef[],
+  beforeCache: (number | null)[],
+  afterDetect: (number | null)[],
+): Promise<void> {
+  const updates: Array<{ id: string; ratio: number }> = []
+  for (let i = 0; i < clips.length; i++) {
+    const clip = clips[i]
+    if (!clip.id) continue
+    if (beforeCache[i] != null) continue
+    const detected = afterDetect[i]
+    if (detected == null) continue
+    if (detected < 0 || detected > 1) continue
+    updates.push({ id: clip.id, ratio: detected })
+  }
+  if (updates.length === 0) return
+  await Promise.all(
+    updates.map((u) =>
+      client.from('clips').update({ horizon_y_ratio: u.ratio }).eq('id', u.id),
+    ),
+  ).catch(() => {
+    // Already best-effort — explicit catch silences unhandled rejection
+    // warnings if one of the updates throws.
+  })
 }

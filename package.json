@@ -16,6 +16,7 @@
     "prepare": "husky",
     "size": "size-limit",
     "hooks:detect": "tsx scripts/detect-hooks.ts",
+    "horizons:backfill": "tsx scripts/backfill-horizons.ts",
     "reel:compose": "tsx scripts/compose-reel.ts",
     "reel:auto": "tsx scripts/reel-auto.ts",
     "db": "supabase --workdir data",

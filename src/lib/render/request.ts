@@ -21,6 +21,13 @@ export const renderRequestSchema = z
     artistName: z.string().trim().max(80).optional(),
     slowmo: z.number().positive().max(2).optional(),
     noOverlays: z.boolean().optional(),
+    // Optional fade tuning. Clamp ranges keep accidental large values
+    // (which would distort the timeline) from reaching the renderer.
+    audioFadeInSeconds: z.number().nonnegative().max(20).optional(),
+    audioFadeOutSeconds: z.number().nonnegative().max(20).optional(),
+    videoFadeInSeconds: z.number().nonnegative().max(20).optional(),
+    videoFadeOutSeconds: z.number().nonnegative().max(20).optional(),
+    outroTailSeconds: z.number().nonnegative().max(20).optional(),
   })
   .refine(
     (v) =>

@@ -56,6 +56,14 @@ export type ComposeReelOptions = {
    * skip the analysis (saves ~100-300ms per clip).
    */
   alignHorizons?: boolean
+  /**
+   * Pre-computed horizon ratios indexed to match `explicitClipPaths` (or
+   * the order auto-selection returns). Entries that are null trigger
+   * detection inside composeReel — populated values are used as-is.
+   * The merged array is returned in ComposeReelResult so callers can
+   * persist newly-detected values for next time.
+   */
+  clipHorizonRatios?: (number | null)[]
   onProgress?: (info: { stage: string; pct?: number; message?: string }) => void
 }
 
@@ -66,6 +74,8 @@ export type ComposeReelResult = {
   height: number
   fps: number
   bpm?: number
+  /** Per-clip horizon ratios used during render — useful for caching. */
+  clipHorizonRatios?: (number | null)[]
 }
 
 export async function composeReel(opts: ComposeReelOptions): Promise<ComposeReelResult> {
@@ -185,16 +195,31 @@ export async function composeReel(opts: ComposeReelOptions): Promise<ComposeReel
 
     // Horizon analysis runs on the post-crop files so the Y ratio refers
     // to the canvas the clip will actually be rendered on. Only useful
-    // when we're going to crossfade; skipped otherwise.
+    // when we're going to crossfade; skipped otherwise. Entries
+    // provided by the caller in opts.clipHorizonRatios are trusted and
+    // not re-detected — that's the cache path used by the render
+    // engine, which reads from the clips table.
     const alignHorizons = opts.alignHorizons ?? true
     let clipHorizonRatios: (number | null)[] | undefined
     if (alignHorizons && transition === 'crossfade') {
-      progress({
-        stage: 'horizon',
-        message: `Detecting horizon line in ${selections.length} clip(s)`,
-      })
+      const cached = opts.clipHorizonRatios
+      const needsAny =
+        !cached ||
+        cached.length !== clipOutPaths.length ||
+        cached.some((v) => v == null)
+      if (needsAny) {
+        progress({
+          stage: 'horizon',
+          message: `Detecting horizon line in ${selections.length} clip(s)`,
+        })
+      }
       clipHorizonRatios = []
       for (let i = 0; i < clipOutPaths.length; i++) {
+        const cachedValue = cached?.[i]
+        if (cachedValue != null) {
+          clipHorizonRatios.push(cachedValue)
+          continue
+        }
         try {
           const result = await detectHorizon(clipOutPaths[i], clipPlaybackDurations[i])
           clipHorizonRatios.push(result.ratio)
@@ -204,6 +229,10 @@ export async function composeReel(opts: ComposeReelOptions): Promise<ComposeReel
           clipHorizonRatios.push(null)
         }
       }
+    } else if (opts.clipHorizonRatios) {
+      // Pass-through when alignment is disabled / not a crossfade —
+      // callers can still want to know what they cached.
+      clipHorizonRatios = opts.clipHorizonRatios.slice()
     }
 
     let wordmarkName: string | undefined
@@ -293,6 +322,7 @@ export async function composeReel(opts: ComposeReelOptions): Promise<ComposeReel
       height: composition.height,
       fps: composition.fps,
       bpm: detectedBpm,
+      clipHorizonRatios,
     }
   } finally {
     rmSync(publicDir, { recursive: true, force: true })

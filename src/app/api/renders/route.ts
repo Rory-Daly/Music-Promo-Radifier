@@ -75,26 +75,44 @@ export async function POST(request: NextRequest) {
 
   const { data: clipRows, error: clipsError } = await supabase
     .from('clips')
-    .select('id, artist_id, source, storage_url, gdrive_file_id')
+    .select('id, artist_id, source, storage_url, gdrive_file_id, horizon_y_ratio')
     .in('id', input.clipIds)
   if (clipsError) return err('Failed to load clips', 500, 'clips_query_failed')
   if (!clipRows || clipRows.length !== input.clipIds.length) {
     return err('One or more clips not found', 404, 'clip_not_found')
   }
+  // Index the rows so we can return clipRefs in the same order the user
+  // selected — slot ordering matters to the composition.
+  const clipById = new Map(clipRows.map((c) => [c.id, c]))
   const clipRefs: ClipRef[] = []
-  for (const clip of clipRows) {
+  for (const clipId of input.clipIds) {
+    const clip = clipById.get(clipId)
+    if (!clip) return err('One or more clips not found', 404, 'clip_not_found')
     if (clip.artist_id !== input.artistId) {
       return err('Clip belongs to another artist', 403, 'forbidden')
     }
+    const horizonYRatio =
+      typeof clip.horizon_y_ratio === 'number' ? clip.horizon_y_ratio : null
     if (clip.source === 'gdrive') {
       if (!clip.gdrive_file_id) {
         return err(`Clip ${clip.id} marked gdrive but has no file id`, 422, 'no_gdrive_id')
       }
-      clipRefs.push({ source: 'gdrive', fileId: clip.gdrive_file_id })
+      clipRefs.push({
+        id: clip.id,
+        source: 'gdrive',
+        fileId: clip.gdrive_file_id,
+        horizonYRatio,
+      })
     } else {
       const ref = parseStoragePath(clip.storage_url)
       if (!ref) return err(`Clip ${clip.id} has no storage_url`, 422, 'no_clip_storage')
-      clipRefs.push({ source: 'supabase', bucket: ref.bucket, path: ref.path })
+      clipRefs.push({
+        id: clip.id,
+        source: 'supabase',
+        bucket: ref.bucket,
+        path: ref.path,
+        horizonYRatio,
+      })
     }
   }
 
@@ -148,6 +166,11 @@ export async function POST(request: NextRequest) {
         noOverlays: input.noOverlays,
         aspectRatio: input.aspectRatio,
         transition: input.transition,
+        audioFadeInSeconds: input.audioFadeInSeconds,
+        audioFadeOutSeconds: input.audioFadeOutSeconds,
+        videoFadeInSeconds: input.videoFadeInSeconds,
+        videoFadeOutSeconds: input.videoFadeOutSeconds,
+        outroTailSeconds: input.outroTailSeconds,
         driveAuth,
       })
     } catch (e) {

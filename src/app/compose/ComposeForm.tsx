@@ -62,6 +62,14 @@ export function ComposeForm({ artistId, tracks, hooks, clips }: Props) {
     () => new Set<AspectRatio>(['9x16']),
   )
   const [transition, setTransition] = useState<Transition>('cut')
+  // Fade / outro tuning — undefined = use server defaults. Surfaced under
+  // the Advanced section so the common path stays one-click.
+  const [showAdvanced, setShowAdvanced] = useState(false)
+  const [audioFadeIn, setAudioFadeIn] = useState<string>('')
+  const [audioFadeOut, setAudioFadeOut] = useState<string>('')
+  const [videoFadeIn, setVideoFadeIn] = useState<string>('')
+  const [videoFadeOut, setVideoFadeOut] = useState<string>('')
+  const [outroTail, setOutroTail] = useState<string>('')
   const [submitState, setSubmitState] = useState<SubmitState>({ kind: 'idle' })
 
   function toggleAspectRatio(ratio: AspectRatio) {
@@ -173,6 +181,11 @@ export function ComposeForm({ artistId, tracks, hooks, clips }: Props) {
             cta: cta.trim() || undefined,
             slowmo,
             noOverlays,
+            audioFadeInSeconds: numericOrUndefined(audioFadeIn),
+            audioFadeOutSeconds: numericOrUndefined(audioFadeOut),
+            videoFadeInSeconds: numericOrUndefined(videoFadeIn),
+            videoFadeOutSeconds: numericOrUndefined(videoFadeOut),
+            outroTailSeconds: numericOrUndefined(outroTail),
           }
           const res = await fetch('/api/renders', {
             method: 'POST',
@@ -429,6 +442,58 @@ export function ComposeForm({ artistId, tracks, hooks, clips }: Props) {
           </label>
         </Section>
 
+        <Section label="7 · Advanced (fades and outro)">
+          <button
+            type="button"
+            onClick={() => setShowAdvanced((v) => !v)}
+            aria-expanded={showAdvanced}
+            className="text-xs text-brand-fg-dim underline underline-offset-4 hover:text-brand-fg"
+          >
+            {showAdvanced ? 'Hide advanced fades' : 'Show advanced fades'}
+          </button>
+          {showAdvanced ? (
+            <>
+              <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-5">
+                <FadeInput
+                  label="Audio fade in"
+                  defaultHint="1.5s"
+                  value={audioFadeIn}
+                  onChange={setAudioFadeIn}
+                />
+                <FadeInput
+                  label="Audio fade out"
+                  defaultHint="6s"
+                  value={audioFadeOut}
+                  onChange={setAudioFadeOut}
+                />
+                <FadeInput
+                  label="Video fade in"
+                  defaultHint="1s"
+                  value={videoFadeIn}
+                  onChange={setVideoFadeIn}
+                />
+                <FadeInput
+                  label="Video fade out"
+                  defaultHint="3s"
+                  value={videoFadeOut}
+                  onChange={setVideoFadeOut}
+                />
+                <FadeInput
+                  label="Outro tail (CTA hold)"
+                  defaultHint="4s"
+                  value={outroTail}
+                  onChange={setOutroTail}
+                />
+              </div>
+              <p className="mt-2 text-xs text-brand-fg-faint">
+                Leave blank to use defaults. The composition runs for the audio length plus the
+                outro tail; CTA fades up while the video fades to black, then holds on pure black
+                through the tail.
+              </p>
+            </>
+          ) : null}
+        </Section>
+
         <div className="flex items-center gap-3">
           <button
             type="submit"
@@ -586,4 +651,39 @@ function formatSeconds(seconds: number): string {
   const m = Math.floor(seconds / 60)
   const s = Math.floor(seconds % 60)
   return `${m}:${String(s).padStart(2, '0')}`
+}
+
+function numericOrUndefined(raw: string): number | undefined {
+  const trimmed = raw.trim()
+  if (trimmed.length === 0) return undefined
+  const n = Number(trimmed)
+  return Number.isFinite(n) && n >= 0 ? n : undefined
+}
+
+function FadeInput({
+  label,
+  defaultHint,
+  value,
+  onChange,
+}: {
+  label: string
+  defaultHint: string
+  value: string
+  onChange: (v: string) => void
+}) {
+  return (
+    <label className="block">
+      <span className="block text-xs uppercase tracking-[0.2em] text-brand-fg-faint">{label}</span>
+      <input
+        type="number"
+        min={0}
+        max={20}
+        step={0.5}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={defaultHint}
+        className="mt-1 block w-full rounded-md border border-brand-rule bg-brand-bg-2 px-2.5 py-1.5 text-sm text-brand-fg focus:border-brand-accent focus:outline-none"
+      />
+    </label>
+  )
 }
