@@ -300,11 +300,15 @@ REMOTION_AWS_REGION=
 |---|---|---|
 | Supabase | Free tier | Pro ~$38/mo |
 | Vercel | Free hobby | Pro ~$30/mo |
-| Ayrshare | Basic ~$30/mo | Premium ~$225/mo |
+| Ayrshare (per ayrshare.com/pricing, May 2026) | Premium $149 USD/mo (~$225 AUD/mo) — 1 brand profile | Same; Launch $299 USD/mo for 10 brands |
+| Anthropic API (caption generator) | Pennies/month at illutible volume; ~$5-20/mo if heavy | ~$10-50/mo |
 | Remotion | Free self-host | Lambda ~$5-15/mo |
 | Spotify API | Free | Free |
 | Google Drive API | Free | Free |
-| **Total** | **~$30-70/mo AUD** | **~$265-310/mo AUD** |
+| **Total with Ayrshare** | **~$225-280/mo AUD** | **~$280-330/mo AUD** |
+| **Total without Ayrshare** (direct YouTube + manual IG/TikTok via /posts copy buttons) | **~$0-20/mo AUD** | **~$50-90/mo AUD** |
+
+Ayrshare is the dominant line item — at $149 USD/mo for a single-brand profile, it's ~70% of the running cost. Direct native API integration is viable for YouTube (no review gate, free) and feasible for IG/TikTok if you're willing to face their app-review process. X requires a paid Basic tier ($200 USD/mo). See section "Publishing strategy" below for the breakdown.
 
 ---
 
