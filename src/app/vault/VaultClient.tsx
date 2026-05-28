@@ -399,6 +399,11 @@ export function VaultClient({
             </p>
           </form>
 
+          <SyncFolderForm
+            artistId={artistId}
+            onDone={() => startTransition(() => router.refresh())}
+          />
+
           <form
             onSubmit={uploadClip}
             className="space-y-3 rounded-md border border-brand-rule bg-brand-bg-2 p-4"
@@ -631,6 +636,189 @@ function SoundCloudTrackForm({
         compose and render work the same as a manual upload. The smart-link page embeds the
         SoundCloud player.
       </p>
+    </form>
+  )
+}
+
+type SyncState =
+  | { kind: 'idle' }
+  | { kind: 'checking' }
+  | {
+      kind: 'preview'
+      folder: string
+      folderId: string
+      driveFileCount: number
+      clipsTrackedForFolder: number
+      orphans: Array<{ id: string; name: string | null }>
+    }
+  | { kind: 'removing' }
+  | { kind: 'done'; message: string }
+  | { kind: 'error'; message: string }
+
+function SyncFolderForm({
+  artistId,
+  onDone,
+}: {
+  artistId: string
+  onDone: () => void
+}) {
+  const [state, setState] = useState<SyncState>({ kind: 'idle' })
+
+  async function check(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = event.currentTarget
+    const data = new FormData(form)
+    const folder = String(data.get('folder') ?? '').trim()
+    if (folder.length === 0) {
+      setState({ kind: 'error', message: 'Paste a Drive folder URL or ID first.' })
+      return
+    }
+    setState({ kind: 'checking' })
+    try {
+      const res = await fetch('/api/vault/clips/sync-gdrive-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ artistId, folder }),
+      })
+      const body = (await res.json().catch(() => null)) as
+        | {
+            error?: string
+            folderId?: string
+            driveFileCount?: number
+            clipsTrackedForFolder?: number
+            orphans?: Array<{ id: string; name: string | null }>
+          }
+        | null
+      if (!res.ok || !body?.folderId) {
+        setState({ kind: 'error', message: body?.error ?? `Check failed (${res.status})` })
+        return
+      }
+      setState({
+        kind: 'preview',
+        folder,
+        folderId: body.folderId,
+        driveFileCount: body.driveFileCount ?? 0,
+        clipsTrackedForFolder: body.clipsTrackedForFolder ?? 0,
+        orphans: body.orphans ?? [],
+      })
+    } catch (e) {
+      setState({
+        kind: 'error',
+        message: e instanceof Error ? e.message : 'Check failed',
+      })
+    }
+  }
+
+  async function confirmRemove() {
+    if (state.kind !== 'preview') return
+    const { folder, orphans } = state
+    setState({ kind: 'removing' })
+    try {
+      const res = await fetch('/api/vault/clips/sync-gdrive-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ artistId, folder, confirm: true }),
+      })
+      const body = (await res.json().catch(() => null)) as
+        | { error?: string; deleted?: number; thumbnailsRemoved?: number }
+        | null
+      if (!res.ok) {
+        setState({ kind: 'error', message: body?.error ?? `Remove failed (${res.status})` })
+        return
+      }
+      const deleted = body?.deleted ?? orphans.length
+      setState({
+        kind: 'done',
+        message: `Removed ${deleted} clip${deleted === 1 ? '' : 's'}.`,
+      })
+      onDone()
+    } catch (e) {
+      setState({
+        kind: 'error',
+        message: e instanceof Error ? e.message : 'Remove failed',
+      })
+    }
+  }
+
+  return (
+    <form
+      onSubmit={check}
+      className="space-y-3 rounded-md border border-brand-rule bg-brand-bg-2 p-4"
+    >
+      <h2 className="text-sm font-medium text-brand-fg">Sync folder (remove deleted clips)</h2>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+        <label className="block">
+          <span className="block text-xs uppercase tracking-[0.2em] text-brand-fg-faint">
+            Folder URL or ID
+          </span>
+          <input
+            type="text"
+            name="folder"
+            required
+            placeholder="https://drive.google.com/drive/folders/…"
+            className="mt-1 block w-full rounded-md border border-brand-rule bg-brand-bg-2 px-2.5 py-1.5 text-sm text-brand-fg focus:border-brand-accent focus:outline-none"
+          />
+        </label>
+        <button
+          type="submit"
+          disabled={state.kind === 'checking' || state.kind === 'removing'}
+          className="rounded-md border border-brand-rule bg-brand-bg-2 px-3 py-2 text-sm font-medium text-brand-fg transition hover:border-brand-accent disabled:opacity-50"
+        >
+          {state.kind === 'checking' ? 'Checking…' : 'Check'}
+        </button>
+      </div>
+      <p className="text-xs text-brand-fg-faint">
+        Compares the folder against clips you imported from it. Anything in your vault whose
+        Drive file is gone (deleted, trashed, or moved out) is listed for removal.
+        <br />
+        Only clips imported after this folder-tracking update are eligible. Re-import a folder
+        to make its clips eligible.
+      </p>
+
+      {state.kind === 'preview' ? (
+        <div className="space-y-3 rounded-md border border-brand-rule bg-brand-bg p-3">
+          <p className="text-sm text-brand-fg">
+            <strong>{state.driveFileCount}</strong> video
+            {state.driveFileCount === 1 ? '' : 's'} in Drive folder ·{' '}
+            <strong>{state.clipsTrackedForFolder}</strong> tracked in vault ·{' '}
+            <strong>{state.orphans.length}</strong> to remove
+          </p>
+          {state.orphans.length === 0 ? (
+            <p className="text-xs text-brand-fg-faint">Nothing to clean up. Folder is in sync.</p>
+          ) : (
+            <>
+              <ul className="max-h-48 list-disc space-y-1 overflow-y-auto pl-5 text-xs text-brand-fg-dim">
+                {state.orphans.map((o) => (
+                  <li key={o.id}>{o.name ?? o.id}</li>
+                ))}
+              </ul>
+              {state.driveFileCount === 0 ? (
+                <p className="text-xs text-red-300">
+                  Drive returned zero files for this folder. If you didn&apos;t actually empty it,
+                  the share or auth may have lapsed — double-check before removing.
+                </p>
+              ) : null}
+              <button
+                type="button"
+                onClick={confirmRemove}
+                className="rounded-md border border-red-700/60 bg-red-950/40 px-3 py-1.5 text-xs font-medium text-red-100 transition hover:bg-red-900/40"
+              >
+                Remove {state.orphans.length} clip{state.orphans.length === 1 ? '' : 's'}
+              </button>
+            </>
+          )}
+        </div>
+      ) : null}
+
+      {state.kind === 'removing' ? (
+        <p className="text-xs text-brand-fg-faint">Removing…</p>
+      ) : null}
+      {state.kind === 'done' ? (
+        <p className="text-xs text-emerald-300">{state.message}</p>
+      ) : null}
+      {state.kind === 'error' ? (
+        <p className="text-xs text-red-300">{state.message}</p>
+      ) : null}
     </form>
   )
 }

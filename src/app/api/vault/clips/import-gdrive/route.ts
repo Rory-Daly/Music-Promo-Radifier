@@ -182,6 +182,7 @@ async function handle(request: NextRequest) {
       artist_id: artistId,
       source: 'gdrive' as const,
       gdrive_file_id: w.file.id,
+      gdrive_folder_id: folderId,
       name: w.file.name,
       duration_seconds: w.file.durationSeconds,
       width: w.file.width,
