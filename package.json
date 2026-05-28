@@ -28,6 +28,7 @@
     "db:repair": "supabase --workdir data migration repair"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.99.0",
     "@remotion/bundler": "^4.0.460",
     "@remotion/cli": "^4.0.460",
     "@remotion/google-fonts": "^4.0.461",

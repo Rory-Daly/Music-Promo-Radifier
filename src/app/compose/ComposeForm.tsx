@@ -16,6 +16,7 @@ import {
 import { cn } from '@/lib/utils'
 import type { HookRow, TrackRow } from '@/lib/supabase/queries'
 import type { SignedClipRow } from '../vault/VaultClient'
+import { CaptionDrafts } from './CaptionDrafts'
 
 type RenderStatus = 'queued' | 'rendering' | 'ready' | 'failed'
 
@@ -445,6 +446,14 @@ export function ComposeForm({ artistId, tracks, hooks, clips }: Props) {
       </form>
 
       {submitState.kind === 'tracking' ? <RenderStatusPanel state={submitState} /> : null}
+
+      {selectedTrackId ? (
+        <CaptionDrafts
+          artistId={artistId}
+          trackId={selectedTrackId}
+          trackTitle={tracks.find((t) => t.id === selectedTrackId)?.title ?? 'this track'}
+        />
+      ) : null}
     </div>
   )
 }
