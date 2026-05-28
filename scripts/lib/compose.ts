@@ -216,6 +216,11 @@ export async function composeReel(opts: ComposeReelOptions): Promise<ComposeReel
       // Remotion default of CRF ~18, which was producing >1 GB files for
       // even short reels and tripping the renders bucket cap.
       crf: 23,
+      // Lock audio at 192k AAC so we don't inherit whatever Remotion's
+      // default does. 192k is transparent for the cinematic / instrumental
+      // material we render — and matches what most social platforms re-
+      // encode to anyway.
+      audioBitrate: '192k',
       outputLocation: outputAbs,
       inputProps,
       onProgress: ({ progress: p }) => {
