@@ -18,8 +18,8 @@ const argsSchema = z.object({
   input: z.string().min(1),
   source: z.enum(['spotify', 'local']).optional(),
   count: z.coerce.number().int().positive().max(20).default(5),
-  minDuration: z.coerce.number().positive().default(15),
-  maxDuration: z.coerce.number().positive().default(30),
+  minDuration: z.coerce.number().positive().default(45),
+  maxDuration: z.coerce.number().positive().default(75),
 })
 
 type Args = z.infer<typeof argsSchema>
@@ -55,8 +55,8 @@ Usage:
 Flags:
   --source=spotify|local   Force source. Default: auto-detect (path → local, otherwise → spotify).
   --count=N                Number of hook candidates to return. Default: 5.
-  --minDuration=SECONDS    Minimum hook duration. Default: 15.
-  --maxDuration=SECONDS    Maximum hook duration. Default: 30.
+  --minDuration=SECONDS    Minimum hook duration. Default: 45.
+  --maxDuration=SECONDS    Maximum hook duration. Default: 75.
 
 Examples:
   npm run hooks:detect -- https://open.spotify.com/track/4iV5W9uYEdYUVa79Axb7Rh

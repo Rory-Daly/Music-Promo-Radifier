@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { basename, dirname, extname, join, resolve as resolvePath } from 'node:path'
 import { planBeatAlignedCuts } from './beat-alignment'
 import { discoverClips, mulberry32, selectClips, type SelectedClip } from './clip-selection'
+import { detectHorizon } from './horizon-detect'
 import { detectTempo } from './tempo-detection'
 import {
   type AspectRatio,
@@ -13,6 +14,11 @@ import {
 } from '../remotion/aspect-ratios'
 import type { BasicReelProps } from '../remotion/BasicReel'
 import { DEFAULT_TRANSITION, planTransition, type Transition } from '../remotion/transitions'
+
+// Approximately one new clip every N seconds when the caller hasn't
+// chosen a clip count. Tuned for ~1-minute reels — slower, more
+// cinematic pacing than the old "one clip every 7s" default.
+const DEFAULT_CLIP_DENSITY_SECONDS = 10
 
 export type ComposeReelOptions = {
   audioPath: string
@@ -37,6 +43,19 @@ export type ComposeReelOptions = {
   transition?: Transition
   wordmarkPath?: string
   fontsDir?: string
+  /** Reel start/end softening + outro CTA hold. All defaults match BasicReel. */
+  audioFadeInSeconds?: number
+  audioFadeOutSeconds?: number
+  videoFadeInSeconds?: number
+  videoFadeOutSeconds?: number
+  outroTailSeconds?: number
+  /**
+   * When true (default), the preprocessed clips are scanned for a
+   * dominant horizon line so crossfade transitions can shift the
+   * incoming clip vertically to keep horizons aligned. Set false to
+   * skip the analysis (saves ~100-300ms per clip).
+   */
+  alignHorizons?: boolean
   onProgress?: (info: { stage: string; pct?: number; message?: string }) => void
 }
 
@@ -85,7 +104,8 @@ export async function composeReel(opts: ComposeReelOptions): Promise<ComposeReel
     const audioName = `audio${extname(audioAbs) || '.wav'}`
     copyFileSync(audioAbs, join(publicDir, audioName))
 
-    const numClipsTarget = opts.numClips ?? Math.max(3, Math.round(durationSeconds / 7))
+    const numClipsTarget =
+      opts.numClips ?? Math.max(4, Math.round(durationSeconds / DEFAULT_CLIP_DENSITY_SECONDS))
     const intendedNumClips =
       explicitClipPaths.length > 0 ? explicitClipPaths.length : numClipsTarget
 
@@ -134,6 +154,8 @@ export async function composeReel(opts: ComposeReelOptions): Promise<ComposeReel
       message: `Pre-processing ${selections.length} clip(s) to ${aspectConfig.width}x${aspectConfig.height} @ ${fps}fps (${aspectRatio}, ${transition})`,
     })
     const clipNames: string[] = []
+    const clipOutPaths: string[] = []
+    const clipPlaybackDurations: number[] = []
     // For overlapping transitions (crossfade), every non-last clip needs an
     // extra `transition.durationSeconds` of footage at its tail so the next
     // clip can fade in over the top. Last clip is exactly its slot length.
@@ -146,16 +168,42 @@ export async function composeReel(opts: ComposeReelOptions): Promise<ComposeReel
       const extension = isLast ? 0 : tailExtensionSeconds
       const outName = `clip${i}.mp4`
       const outPath = join(publicDir, outName)
+      const playbackDuration = sel.outputDurationSeconds + extension
       await preprocessClip(
         sel.path,
         outPath,
-        sel.outputDurationSeconds + extension,
+        playbackDuration,
         fps,
         slowmo,
         sel.sourceStartSeconds,
         aspectConfig.ffmpegCropFilter,
       )
       clipNames.push(outName)
+      clipOutPaths.push(outPath)
+      clipPlaybackDurations.push(playbackDuration)
+    }
+
+    // Horizon analysis runs on the post-crop files so the Y ratio refers
+    // to the canvas the clip will actually be rendered on. Only useful
+    // when we're going to crossfade; skipped otherwise.
+    const alignHorizons = opts.alignHorizons ?? true
+    let clipHorizonRatios: (number | null)[] | undefined
+    if (alignHorizons && transition === 'crossfade') {
+      progress({
+        stage: 'horizon',
+        message: `Detecting horizon line in ${selections.length} clip(s)`,
+      })
+      clipHorizonRatios = []
+      for (let i = 0; i < clipOutPaths.length; i++) {
+        try {
+          const result = await detectHorizon(clipOutPaths[i], clipPlaybackDurations[i])
+          clipHorizonRatios.push(result.ratio)
+        } catch {
+          // Detection failures are non-fatal — we just skip alignment
+          // for transitions involving this clip.
+          clipHorizonRatios.push(null)
+        }
+      }
     }
 
     let wordmarkName: string | undefined
@@ -181,12 +229,18 @@ export async function composeReel(opts: ComposeReelOptions): Promise<ComposeReel
       durationSeconds,
       clipFiles: clipNames,
       clipDurationsSeconds,
+      clipHorizonRatios,
       aspectRatio,
       transition,
       trackTitle: noOverlays ? '' : (opts.title ?? deriveTitle(opts.audioPath)),
       artistName,
       ctaText: noOverlays ? '' : cta,
       wordmarkFile: wordmarkName,
+      audioFadeInSeconds: opts.audioFadeInSeconds,
+      audioFadeOutSeconds: opts.audioFadeOutSeconds,
+      videoFadeInSeconds: opts.videoFadeInSeconds,
+      videoFadeOutSeconds: opts.videoFadeOutSeconds,
+      outroTailSeconds: opts.outroTailSeconds,
     }
 
     progress({ stage: 'bundle', message: 'Bundling Remotion project...' })

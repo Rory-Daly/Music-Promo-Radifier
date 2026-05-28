@@ -24,8 +24,11 @@ export type FindHooksOptions = {
 }
 
 export function findTopHooks(curve: EnergyCurve, options: FindHooksOptions = {}): HookCandidate[] {
-  const minDuration = options.minDuration ?? 15
-  const maxDuration = options.maxDuration ?? 30
+  // Defaults target ~1-minute reels — long enough to set a mood, short
+  // enough to fit social formats. Callers can still pass narrower bounds
+  // if they want short-form clips.
+  const minDuration = options.minDuration ?? 45
+  const maxDuration = options.maxDuration ?? 75
   const durationStep = options.durationStep ?? 5
   const startStride = options.startStride ?? 1
   const count = options.count ?? 5

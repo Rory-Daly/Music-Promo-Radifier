@@ -10,13 +10,19 @@ function uniformCurve(samples: number[], resolutionSeconds = 1): EnergyCurve {
 }
 
 describe('findTopHooks', () => {
+  // These tests probe the scoring algorithm, not the default duration
+  // bounds. They were written for the original 15-30s defaults; the
+  // function's defaults have since moved to ~60s reels. Passing the
+  // historical bounds keeps the algorithmic assertions sharp.
+  const shortDefaults = { minDuration: 15, maxDuration: 30 } as const
+
   it('prefers the loud section over the quiet section', () => {
     const samples = [
       ...Array<number>(30).fill(0.1),
       ...Array<number>(30).fill(0.9),
       ...Array<number>(30).fill(0.1),
     ]
-    const hooks = findTopHooks(uniformCurve(samples), { count: 1 })
+    const hooks = findTopHooks(uniformCurve(samples), { ...shortDefaults, count: 1 })
     expect(hooks).toHaveLength(1)
     expect(hooks[0].startSeconds).toBeGreaterThanOrEqual(20)
     expect(hooks[0].endSeconds).toBeLessThanOrEqual(70)
@@ -28,14 +34,14 @@ describe('findTopHooks', () => {
       ...Array<number>(40).fill(0.1),
       ...Array<number>(40).fill(0.95),
     ]
-    const hooks = findTopHooks(uniformCurve(samples), { count: 1 })
+    const hooks = findTopHooks(uniformCurve(samples), { ...shortDefaults, count: 1 })
     expect(hooks[0].label).toBe('drop')
     expect(hooks[0].contrast).toBeGreaterThan(0.5)
   })
 
   it('returns non-overlapping candidates', () => {
     const samples = Array.from({ length: 240 }, (_, i) => 0.4 + Math.sin(i * 0.2) * 0.3 + (i % 30 === 0 ? 0.3 : 0))
-    const hooks = findTopHooks(uniformCurve(samples), { count: 5 })
+    const hooks = findTopHooks(uniformCurve(samples), { ...shortDefaults, count: 5 })
     for (let i = 0; i < hooks.length; i++) {
       for (let j = i + 1; j < hooks.length; j++) {
         const a = hooks[i]
@@ -54,8 +60,16 @@ describe('findTopHooks', () => {
       ...Array<number>(30).fill(0.95),
       ...Array<number>(80).fill(0.3),
     ]
-    const hooks = findTopHooks(uniformCurve(samples), { count: 1 })
+    const hooks = findTopHooks(uniformCurve(samples), { ...shortDefaults, count: 1 })
     expect(hooks[0].startSeconds).toBeGreaterThan(50)
+  })
+
+  it('defaults to ~60s hook bounds for full-length reels', () => {
+    const samples = Array<number>(180).fill(0.5)
+    const hooks = findTopHooks(uniformCurve(samples), { count: 1 })
+    expect(hooks).toHaveLength(1)
+    expect(hooks[0].durationSeconds).toBeGreaterThanOrEqual(45)
+    expect(hooks[0].durationSeconds).toBeLessThanOrEqual(75)
   })
 
   it('returns an empty list when the track is shorter than minDuration', () => {

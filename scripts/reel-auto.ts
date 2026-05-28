@@ -12,8 +12,8 @@ loadEnv({ path: '.env.local', override: true, quiet: true })
 const ownArgsSchema = z.object({
   audio: z.string().min(1),
   hookIndex: z.coerce.number().int().min(0).max(10).default(0),
-  hookMin: z.coerce.number().positive().default(15),
-  hookMax: z.coerce.number().positive().default(30),
+  hookMin: z.coerce.number().positive().default(45),
+  hookMax: z.coerce.number().positive().default(75),
 })
 
 type OwnArgs = z.infer<typeof ownArgsSchema>
@@ -70,8 +70,8 @@ Required:
 
 Auto-hook flags (this script):
   --hookIndex=N        Pick the Nth-best hook (0=top). Default: 0.
-  --hookMin=SECONDS    Minimum hook duration. Default: 15.
-  --hookMax=SECONDS    Maximum hook duration. Default: 30.
+  --hookMin=SECONDS    Minimum hook duration. Default: 45.
+  --hookMax=SECONDS    Maximum hook duration. Default: 75.
 
 All other reel:compose flags are forwarded unchanged. See
 \`npm run reel:compose -- --help\` for the full list (clips selection,

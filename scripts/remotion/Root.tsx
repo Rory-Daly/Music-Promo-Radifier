@@ -36,8 +36,12 @@ export const Root: React.FC = () => {
           ? props.aspectRatio
           : '9x16'
         const config = ASPECT_RATIO_CONFIGS[aspect]
+        // Composition runs longer than the audio by outroTailSeconds so
+        // the CTA can hold on pure black after the music ends.
+        const outroTail = props.outroTailSeconds ?? 4
+        const totalSeconds = props.durationSeconds + outroTail
         return {
-          durationInFrames: Math.max(1, Math.round(props.durationSeconds * FPS)),
+          durationInFrames: Math.max(1, Math.round(totalSeconds * FPS)),
           width: config.width,
           height: config.height,
         }
