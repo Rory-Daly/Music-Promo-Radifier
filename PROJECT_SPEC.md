@@ -29,7 +29,7 @@ Track in → ten posts out, scheduled and published. The tool finds the most ree
 - [ ] **Hook detector** — given an uploaded audio file, surface the 3-5 most reel-worthy 15-30s sections using local audio analysis (FFmpeg → RMS energy curve → score by mean energy × contrast × position). **Note:** Spotify's Audio Analysis API (sections/beats/tempo) was originally planned as the primary path; it was deprecated for new apps in Nov 2024 and returns 403 for our app. See [docs/spotify.md](docs/spotify.md). Beat-aligned cutting (for the auto-cut composer) will need a separate local beat-tracker — likely [essentia.js](https://essentia.upf.edu/essentiajs.html) — added when we wire video rendering.
 - [ ] **Auto-cut composer (Remotion)** — given a chosen hook and a set of drone clips, render reel variants for IG Reel (9:16), IG Story (9:16), IG feed (1:1), TikTok (9:16), YouTube Short (9:16), and X/Threads (16:9 or 1:1). Cuts on beat. Overlays artwork, title card, smart-link CTA. Reusable templates so output stays brand-consistent across releases.
 - [x] **Caption generator** — drafts platform-specific captions (TikTok punchy, IG vibe, YT SEO-friendly) using track metadata and brand kit voice. User edits + approves. *(v1: POST /api/captions/draft against `claude-opus-4-7` with adaptive thinking + low effort + prompt-cached voice system prompt; per-platform editable preview in compose. Needs `ANTHROPIC_API_KEY`.)*
-- [~] **Multi-platform publisher** — schedule or post to IG (Reels/Story/Feed), TikTok, YouTube Shorts, X, Threads, Facebook via [Post-Pulse](https://post-pulse.com/). One approval, fans out. Per-artist account connections. *(v1: Posts table + `/posts` UI for drafts/scheduled/published lifecycle is built — caption editing, schedule/unschedule, delete, render preview. Post-Pulse connection + publish-on-schedule worker still to wire.)*
+- [~] **Multi-platform publisher** — schedule or post to IG (Reels/Story/Feed), TikTok, YouTube Shorts, X, Threads, Facebook via [Post-Pulse](https://post-pulse.com/) (YouTube uses native API). One approval, fans out. Per-artist account connections. *(v1: Posts table + `/posts` UI for drafts/scheduled/published lifecycle is built — caption editing, schedule/unschedule, delete, render preview. Post-Pulse client lib + `/settings` page for per-platform account linking + `/api/post-pulse/webhook` status callbacks + `/api/cron/publish-scheduled` safety-net worker are wired. Threads `type` string is assumed; verify on first live use. See [docs/post-pulse.md](docs/post-pulse.md).)*
 - [ ] **Release campaign templates** — given a release date, autogenerate a calendar of 8-12 post slots across a 4-week window (tease, countdown, drop day, behind-scenes, alt cuts, follow-ups). User batch-approves drafts.
 - [x] **Smart link generator** — single URL → all DSPs (linkfire-style). Per-track. Public page at `/r/<artist>/<track>` fans out to Spotify/Apple/YouTube/Bandcamp/SoundCloud/Tidal/Deezer using the artist's `brand_kit.smart_link.dsps`. Track slugs auto-generated on upload.
 
@@ -159,8 +159,10 @@ All tables include `id uuid primary key`, `created_at timestamptz default now()`
 |---|---|---|
 | artist_id | uuid → artists | |
 | platform | enum | as above |
-| post_pulse_profile_key | text | encrypted |
-| display_handle | text | |
+| social_media_account_id | bigint | numeric Post-Pulse account id (not a secret) |
+| display_handle | text | e.g. `@illutible` |
+
+Note: Post-Pulse uses one workspace-level `POST_PULSE_API_KEY` for all publishing. There is no per-account OAuth token to store; the only per-(artist, platform) state is the numeric Post-Pulse `socialMediaAccountId` (visible in the Post-Pulse dashboard). RLS keeps writes service-role-only; reads are member-scoped so the Settings UI can render connection state.
 
 ### `integrations`
 | Field | Type | Notes |
@@ -225,7 +227,11 @@ Key interactions:
 | POST | `/api/campaigns` | required | Create campaign + draft posts. |
 | POST | `/api/integrations/google/callback` | required | OAuth callback. |
 | POST | `/api/integrations/spotify/callback` | required | OAuth callback. |
+| GET | `/api/integrations/post-pulse/accounts` | required | List Post-Pulse workspace accounts (degrades to manual entry). |
+| POST | `/api/integrations/post-pulse/link` | required | Link a Post-Pulse account to (artist, platform). |
+| POST | `/api/integrations/post-pulse/unlink` | required | Remove a (artist, platform) link. |
 | POST | `/api/post-pulse/webhook` | public + signed | Status callbacks from Post-Pulse. |
+| GET / POST | `/api/cron/publish-scheduled` | Bearer CRON_SECRET | Retries scheduled posts that never reached Post-Pulse. |
 
 All inputs validated with Zod (per project conventions).
 
