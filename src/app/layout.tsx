@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { DM_Sans, JetBrains_Mono, Special_Elite } from 'next/font/google'
 import { SpeedInsights } from '@vercel/speed-insights/next'
+import { Toaster } from 'sonner'
 import { loadBrandKit } from '@/lib/brand-kit/load'
 import { defaultBrandKit } from '@/lib/brand-kit/defaults'
 import { brandStyleVars } from '@/lib/brand-kit/css'
@@ -75,6 +76,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     >
       <body className="bg-brand-bg text-brand-fg font-body antialiased" suppressHydrationWarning>
         {children}
+        <Toaster
+          theme="dark"
+          position="bottom-right"
+          toastOptions={{
+            classNames: {
+              toast: 'border border-brand-rule bg-brand-bg-2 text-brand-fg',
+              actionButton: 'bg-brand-accent text-brand-bg',
+            },
+          }}
+        />
         <SpeedInsights />
       </body>
     </html>

@@ -1,8 +1,9 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useMemo, useState, useTransition } from 'react'
+import { useCallback, useMemo, useState, useTransition } from 'react'
 import { ClientDate } from '@/components/ClientDate'
+import { useDeferredDelete } from '@/hooks/useDeferredDelete'
 import type { PostPlatform, PostRow, PostStatus } from '@/lib/supabase/queries'
 import { cn } from '@/lib/utils'
 
@@ -41,6 +42,12 @@ export function PostsClient({ initialPosts, artistId, youtubeConnected }: Props)
     | null
   >(null)
 
+  const deleteEndpoint = useCallback((id: string) => `/api/posts/${id}`, [])
+  const { pendingIds: pendingDeleteIds, schedule: scheduleDelete } = useDeferredDelete({
+    endpoint: deleteEndpoint,
+    toastLabel: 'Post deleted',
+  })
+
   const groups = useMemo(() => {
     const g: Record<PostStatus, PostRow[]> = {
       draft: [],
@@ -48,9 +55,12 @@ export function PostsClient({ initialPosts, artistId, youtubeConnected }: Props)
       published: [],
       failed: [],
     }
-    for (const p of initialPosts) g[p.status].push(p)
+    for (const p of initialPosts) {
+      if (pendingDeleteIds.has(p.id)) continue
+      g[p.status].push(p)
+    }
     return g
-  }, [initialPosts])
+  }, [initialPosts, pendingDeleteIds])
 
   async function call(
     url: string,
@@ -107,8 +117,11 @@ export function PostsClient({ initialPosts, artistId, youtubeConnected }: Props)
     )
   }
 
-  async function remove(post: PostRow) {
-    await call(`/api/posts/${post.id}`, { method: 'DELETE' }, 'Deleted', post.id)
+  function remove(post: PostRow) {
+    // Deferred-delete + undo (see docs/ux-principles.md §4). The hook
+    // hides the card immediately, shows an undo toast, and only fires
+    // the DELETE once the undo window closes.
+    scheduleDelete(post.id)
   }
 
   async function publish(post: PostRow) {
@@ -157,7 +170,8 @@ export function PostsClient({ initialPosts, artistId, youtubeConnected }: Props)
     />
   )
 
-  if (initialPosts.length === 0) {
+  const visibleCount = STATUS_ORDER.reduce((sum, s) => sum + groups[s].length, 0)
+  if (visibleCount === 0) {
     return (
       <div className="space-y-6">
         {connectionBanner}
