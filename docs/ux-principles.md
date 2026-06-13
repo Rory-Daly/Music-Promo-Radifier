@@ -112,13 +112,25 @@ When something disappears from the interface (deleted, archived, moved out of fi
 
 **Undo toast pattern:**
 
+For list deletes (the common case), use the [`useDeferredDelete`](../src/hooks/useDeferredDelete.ts) hook — it hides the item locally, shows the undo toast, defers the actual DELETE until the window closes, and flushes pending deletes on SPA navigation via `keepalive`. See [`RecentReelsList`](../src/app/RecentReelsList.tsx) and [`PostsClient`](../src/app/posts/PostsClient.tsx) for call sites.
+
 ```tsx
-// Show action, then undo affordance
+// In a client component listing items keyed by id.
+const endpoint = useCallback((id: string) => `/api/things/${id}`, [])
+const { pendingIds, schedule } = useDeferredDelete({ endpoint, toastLabel: 'Thing deleted' })
+
+const visible = useMemo(
+  () => initialThings.filter((t) => !pendingIds.has(t.id)),
+  [initialThings, pendingIds],
+)
+// …render visible, wire <button onClick={() => schedule(t.id)} />
+```
+
+For one-off cases that don't fit the hook (eg single-item pages), use sonner directly:
+
+```tsx
 toast('Item deleted', {
-  action: {
-    label: 'Undo',
-    onClick: () => restoreItem(id),
-  },
+  action: { label: 'Undo', onClick: () => restoreItem(id) },
   duration: 8000, // give enough time to notice and act
 });
 ```
