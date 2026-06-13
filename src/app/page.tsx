@@ -1,12 +1,11 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { ClientDate } from '@/components/ClientDate'
 import {
   ensureFirstArtist,
   getCurrentUserAndArtists,
   listRecentRenders,
-  type RenderRow,
 } from '@/lib/supabase/queries'
+import { RecentReelsList } from './RecentReelsList'
 
 export default async function HomePage() {
   const { user, memberships } = await getCurrentUserAndArtists()
@@ -100,13 +99,7 @@ export default async function HomePage() {
               CLI.
             </p>
           ) : (
-            <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {renders.map((render) => (
-                <li key={render.id}>
-                  <RenderCard render={render} />
-                </li>
-              ))}
-            </ul>
+            <RecentReelsList initialRenders={renders} />
           )}
         </section>
 
@@ -141,40 +134,6 @@ function Stat({ label, value }: { label: string; value: string }) {
     <div className="rounded-md border border-brand-rule bg-brand-bg-2 p-4">
       <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-brand-fg-faint">{label}</p>
       <p className="mt-1 truncate text-sm text-brand-fg">{value}</p>
-    </div>
-  )
-}
-
-function RenderCard({ render }: { render: RenderRow }) {
-  const ready = render.status === 'ready' && render.output_url
-  return (
-    <div className="overflow-hidden rounded-md border border-brand-rule bg-brand-bg-2">
-      <div className="aspect-[9/16] bg-brand-bg">
-        {ready ? (
-           
-          <video
-            src={render.output_url ?? undefined}
-            className="h-full w-full object-cover"
-            controls
-            preload="metadata"
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center p-4 text-center">
-            <span className="text-xs uppercase tracking-[0.2em] text-brand-fg-faint">
-              {render.status}
-              {render.error ? ` — ${render.error.slice(0, 60)}` : ''}
-            </span>
-          </div>
-        )}
-      </div>
-      <div className="flex items-center justify-between gap-2 px-3 py-2 text-xs">
-        <span className="font-mono uppercase tracking-[0.2em] text-brand-fg-faint">
-          {render.aspect_ratio ?? 'reel'}
-        </span>
-        <span className="text-brand-fg-faint">
-          <ClientDate value={render.created_at} />
-        </span>
-      </div>
     </div>
   )
 }
