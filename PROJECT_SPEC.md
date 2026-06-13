@@ -29,7 +29,7 @@ Track in → ten posts out, scheduled and published. The tool finds the most ree
 - [ ] **Hook detector** — given an uploaded audio file, surface the 3-5 most reel-worthy 15-30s sections using local audio analysis (FFmpeg → RMS energy curve → score by mean energy × contrast × position). **Note:** Spotify's Audio Analysis API (sections/beats/tempo) was originally planned as the primary path; it was deprecated for new apps in Nov 2024 and returns 403 for our app. See [docs/spotify.md](docs/spotify.md). Beat-aligned cutting (for the auto-cut composer) will need a separate local beat-tracker — likely [essentia.js](https://essentia.upf.edu/essentiajs.html) — added when we wire video rendering.
 - [ ] **Auto-cut composer (Remotion)** — given a chosen hook and a set of drone clips, render reel variants for IG Reel (9:16), IG Story (9:16), IG feed (1:1), TikTok (9:16), YouTube Short (9:16), and X/Threads (16:9 or 1:1). Cuts on beat. Overlays artwork, title card, smart-link CTA. Reusable templates so output stays brand-consistent across releases.
 - [x] **Caption generator** — drafts platform-specific captions (TikTok punchy, IG vibe, YT SEO-friendly) using track metadata and brand kit voice. User edits + approves. *(v1: POST /api/captions/draft against `claude-opus-4-7` with adaptive thinking + low effort + prompt-cached voice system prompt; per-platform editable preview in compose. Needs `ANTHROPIC_API_KEY`.)*
-- [~] **Multi-platform publisher** — schedule or post to IG (Reels/Story/Feed), TikTok, YouTube Shorts, X, Threads, Facebook via Ayrshare. One approval, fans out. Per-artist account connections. *(v1: Posts table + `/posts` UI for drafts/scheduled/published lifecycle is built — caption editing, schedule/unschedule, delete, render preview. Ayrshare connection + publish-on-schedule worker still to wire.)*
+- [~] **Multi-platform publisher** — schedule or post to IG (Reels/Story/Feed), TikTok, YouTube Shorts, X, Threads, Facebook via [Post-Pulse](https://post-pulse.com/). One approval, fans out. Per-artist account connections. *(v1: Posts table + `/posts` UI for drafts/scheduled/published lifecycle is built — caption editing, schedule/unschedule, delete, render preview. Post-Pulse connection + publish-on-schedule worker still to wire.)*
 - [ ] **Release campaign templates** — given a release date, autogenerate a calendar of 8-12 post slots across a 4-week window (tease, countdown, drop day, behind-scenes, alt cuts, follow-ups). User batch-approves drafts.
 - [x] **Smart link generator** — single URL → all DSPs (linkfire-style). Per-track. Public page at `/r/<artist>/<track>` fans out to Spotify/Apple/YouTube/Bandcamp/SoundCloud/Tidal/Deezer using the artist's `brand_kit.smart_link.dsps`. Track slugs auto-generated on upload.
 
@@ -142,7 +142,7 @@ All tables include `id uuid primary key`, `created_at timestamptz default now()`
 | hashtags | text[] | |
 | scheduled_for | timestamptz | nullable = post now |
 | status | enum | `draft` \| `scheduled` \| `published` \| `failed` |
-| ayrshare_post_id | text | external id |
+| post_pulse_post_id | text | external id |
 | permalink | text | URL of published post |
 | error | text | nullable |
 
@@ -159,7 +159,7 @@ All tables include `id uuid primary key`, `created_at timestamptz default now()`
 |---|---|---|
 | artist_id | uuid → artists | |
 | platform | enum | as above |
-| ayrshare_profile_key | text | encrypted |
+| post_pulse_profile_key | text | encrypted |
 | display_handle | text | |
 
 ### `integrations`
@@ -204,7 +204,7 @@ Key interactions:
 **Purpose:** See all scheduled and published posts across platforms. Drag-reschedule.
 
 ### Settings — `/settings`
-- Connected socials (per artist) via Ayrshare.
+- Connected socials (per artist) via Post-Pulse.
 - Connected integrations (Google Drive, Spotify) per user.
 - Team members (v2).
 
@@ -220,12 +220,12 @@ Key interactions:
 | POST | `/api/renders` | required | Queue a render job (track + hook + clips + template + platform). |
 | GET | `/api/renders/[id]` | required | Poll render status. |
 | POST | `/api/posts` | required | Create draft post tied to a render. |
-| POST | `/api/posts/[id]/publish` | required | Send to Ayrshare (immediate or scheduled). |
+| POST | `/api/posts/[id]/publish` | required | Send to Post-Pulse (immediate or scheduled). |
 | POST | `/api/posts/[id]/schedule` | required | Update scheduled time. |
 | POST | `/api/campaigns` | required | Create campaign + draft posts. |
 | POST | `/api/integrations/google/callback` | required | OAuth callback. |
 | POST | `/api/integrations/spotify/callback` | required | OAuth callback. |
-| POST | `/api/ayrshare/webhook` | public + signed | Status callbacks from Ayrshare. |
+| POST | `/api/post-pulse/webhook` | public + signed | Status callbacks from Post-Pulse. |
 
 All inputs validated with Zod (per project conventions).
 
@@ -233,13 +233,13 @@ All inputs validated with Zod (per project conventions).
 
 ## Error States
 
-- [ ] Network failure on any external API (Spotify, Drive, Ayrshare) — retry with backoff; surface to user with retry CTA.
+- [ ] Network failure on any external API (Spotify, Drive, Post-Pulse) — retry with backoff; surface to user with retry CTA.
 - [ ] Auth/OAuth token expired — silent refresh; on failure, prompt re-connect.
 - [ ] Render failure (Remotion crash, FFmpeg error) — mark render `failed`, show error inline, allow retry.
-- [ ] Ayrshare post rejection (e.g. IG aspect ratio off, TikTok caption too long) — surface specific error from Ayrshare; suggest fix.
+- [ ] Post-Pulse post rejection (e.g. IG aspect ratio off, TikTok caption too long) — surface specific error from Post-Pulse; suggest fix.
 - [ ] Spotify track not yet released (no analysis available) — fallback to local audio analysis.
 - [ ] Google Drive file too large or unsupported codec — flag during import; suggest re-export.
-- [ ] User exceeds Ayrshare plan limits — warn before scheduling; link to upgrade.
+- [ ] User exceeds Post-Pulse plan limits — warn before scheduling; link to upgrade.
 
 ---
 
@@ -254,7 +254,7 @@ All inputs validated with Zod (per project conventions).
 | File storage | Supabase Storage | Audio, artwork, rendered videos, clip thumbnails. |
 | Video rendering | [Remotion](https://www.remotion.dev) | React-based programmatic video; version-controlled templates; brand consistency. Self-host renderer initially; move to Remotion Lambda if/when volume justifies. |
 | Audio analysis | Local: FFmpeg → RMS energy curve. Beat tracking later via essentia.js (WASM). | Spotify Audio Analysis deprecated for new apps Nov 2024 (returns 403 — see docs/spotify.md). Local analysis is the only viable path. |
-| Social publishing | [Ayrshare](https://www.ayrshare.com) | One API for IG/TikTok/YT Shorts/X/Threads/FB; avoids fighting six native APIs and their review processes. |
+| Social publishing | [Post-Pulse](https://post-pulse.com/) | One API for IG/TikTok/YT Shorts/X/Threads/FB; avoids fighting six native APIs and their review processes. |
 | Google Drive | Google Drive API v3 | Direct import of drone footage without manual download/upload. |
 | SoundCloud ingestion | [yt-dlp](https://github.com/yt-dlp/yt-dlp) CLI shelled out from `/api/vault/tracks/soundcloud` | SoundCloud's official API is closed to new app registrations. yt-dlp is the only reliable path to fetch audio from a public SoundCloud URL. Install: `brew install yt-dlp` on macOS; package manager or the standalone binary on Linux/Vercel. |
 | Smart links | Self-hosted (simple per-DSP redirect) or [Linkfire](https://www.linkfire.com)/[Songwhip](https://songwhip.com) | Start self-hosted; switch if it becomes a maintenance burden. |
@@ -282,9 +282,9 @@ SPOTIFY_CLIENT_SECRET=
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 
-# Ayrshare
-AYRSHARE_API_KEY=
-AYRSHARE_WEBHOOK_SECRET=
+# Post-Pulse
+POST_PULSE_API_KEY=
+POST_PULSE_WEBHOOK_SECRET=
 
 # Remotion Lambda (only if/when we move off self-host)
 REMOTION_AWS_ACCESS_KEY_ID=
@@ -300,15 +300,15 @@ REMOTION_AWS_REGION=
 |---|---|---|
 | Supabase | Free tier | Pro ~$38/mo |
 | Vercel | Free hobby | Pro ~$30/mo |
-| Ayrshare (per ayrshare.com/pricing, May 2026) | Premium $149 USD/mo (~$225 AUD/mo) — 1 brand profile | Same; Launch $299 USD/mo for 10 brands |
+| [Post-Pulse](https://post-pulse.com/) (per [post-pulse.com](https://post-pulse.com/), Jun 2026) | Pay-as-you-go $0.20 USD/publication (~$3-10 AUD/mo at illutible volume), unlimited accounts, no subscription | Subscription $5 USD/account/mo (~$45 AUD/mo for 6 platforms × 1 artist; ~$135 AUD/mo for 6 platforms × 3 artists), unlimited posts |
 | Anthropic API (caption generator) | Pennies/month at illutible volume; ~$5-20/mo if heavy | ~$10-50/mo |
 | Remotion | Free self-host | Lambda ~$5-15/mo |
 | Spotify API | Free | Free |
 | Google Drive API | Free | Free |
-| **Total with Ayrshare** | **~$225-280/mo AUD** | **~$280-330/mo AUD** |
-| **Total without Ayrshare** (direct YouTube + manual IG/TikTok via /posts copy buttons) | **~$0-20/mo AUD** | **~$50-90/mo AUD** |
+| **Total with Post-Pulse** | **~$15-50/mo AUD** | **~$130-240/mo AUD** |
+| **Total without Post-Pulse** (direct YouTube + manual IG/TikTok via /posts copy buttons) | **~$0-20/mo AUD** | **~$50-90/mo AUD** |
 
-Ayrshare is the dominant line item — at $149 USD/mo for a single-brand profile, it's ~70% of the running cost. Direct native API integration is viable for YouTube (no review gate, free) and feasible for IG/TikTok if you're willing to face their app-review process. X requires a paid Basic tier ($200 USD/mo). See section "Publishing strategy" below for the breakdown.
+Post-Pulse is dramatically cheaper than the previously-considered alternative — pay-as-you-go pricing means dev/early costs scale with actual posts rather than a flat subscription. The subscription tier ($5/account/mo, unlimited posts) makes sense once any single connected account exceeds 25 posts/month. Post-Pulse also covers more platforms than the v1 feature list requires — LinkedIn, Bluesky, and Telegram are available if we choose to expand. Direct native API integration remains a fallback for YouTube (no review gate, free) and IG/TikTok (app-review process required); X requires a paid Basic tier ($200 USD/mo). See section "Publishing strategy" below.
 
 ---
 
@@ -330,7 +330,7 @@ Every domain table has `artist_id`. Supabase RLS policies enforce that a user ca
 
 Active artist is stored in user session/cookie. Artist switcher in nav changes the active scope; all pages re-fetch on switch.
 
-Per-artist Ayrshare profile keys mean each artist has its own social account set — no cross-contamination of post destinations.
+Per-artist Post-Pulse profile keys mean each artist has its own social account set — no cross-contamination of post destinations.
 
 ---
 
@@ -338,7 +338,7 @@ Per-artist Ayrshare profile keys mean each artist has its own social account set
 
 - **Product name** — **Legatograph**. Musical term *legato* (smoothly connected notes) + *-graph* (written / recorded). Fits the act of smoothly assembling track + footage at beat boundaries.
 - **Smart links** — **self-host.** Simple per-track redirect page that fans out to all DSPs. One fewer SaaS bill. Lives in this app.
-- **Social publishing** — **Ayrshare for v1.** Revisit moving to native APIs only if cost or feature gaps force it.
+- **Social publishing** — **[Post-Pulse](https://post-pulse.com/) for v1.** Revisit moving to native APIs only if cost or feature gaps force it.
 - **Sync licensing tooling** — **deferred to a later phase.** Definitely wanted, not in v1. Data model already accommodates per-track metadata (ISRC, mood tags) that future sync flows will need, so this is additive.
 - **Render queue infra** — **start self-hosted on Vercel functions.** Measure render times in real use. Upgrade to Remotion Lambda or dedicated worker (Inngest/Trigger.dev) only when measured timeouts force the move.
 - **Track analysis** — **local analysis on uploaded audio file** is the *only* path. Spotify Audio Analysis returns 403 for our (post-Nov-2024) app — see [docs/spotify.md](docs/spotify.md). SoundCloud API is closed to new app registrations and doesn't expose audio analysis anyway. So the flow for every track, released or not, is: artist uploads the audio file (WAV/MP3 export from their DAW), tool runs local analysis (FFmpeg → RMS energy → hook scoring). Beat tracking via essentia.js will be added when we wire video rendering, since beat-aligned cuts matter then.

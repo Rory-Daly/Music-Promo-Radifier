@@ -9,7 +9,7 @@
 --
 -- 2. Platform check constraint. The column was previously plain `text`
 --    with no enum guard; tightening it to the same set the captions
---    endpoint and Ayrshare integration use prevents typo'd platform
+--    endpoint and Post-Pulse integration use prevents typo'd platform
 --    values from getting saved.
 
 alter table public.posts

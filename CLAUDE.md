@@ -19,7 +19,7 @@ Read `PROJECT_SPEC.md` before writing any code. Treat it as the source of truth 
 - **Deployment:** Vercel
 - **Database/Auth:** Supabase (Postgres + Auth + Storage + RLS)
 - **Video rendering:** Remotion (programmatic React video templates)
-- **Social publishing:** Ayrshare (one API for IG / TikTok / YT Shorts / X / Threads / FB)
+- **Social publishing:** [Post-Pulse](https://post-pulse.com/) (one API for IG / TikTok / YT Shorts / X / Threads / FB; also LinkedIn / Bluesky / Telegram if needed)
 - **Audio analysis:** Spotify Audio Analysis API + FFmpeg local fallback
 - **External integrations:** Google Drive (drone footage import), Spotify (track analysis + linking)
 

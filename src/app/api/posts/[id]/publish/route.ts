@@ -147,7 +147,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     .update({
       status: 'published',
       permalink: result.watchUrl,
-      ayrshare_post_id: null,
+      post_pulse_post_id: null,
       error: null,
       updated_at: new Date().toISOString(),
     })
