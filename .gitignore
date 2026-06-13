@@ -43,6 +43,9 @@ coverage/
 .vscode/
 .idea/
 
+# Claude Code local overrides (machine-specific perms, not for sharing)
+.claude/settings.local.json
+
 # OS
 .DS_Store
 Thumbs.db
