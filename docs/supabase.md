@@ -66,6 +66,8 @@ Then open `http://localhost:3030`. You should be redirected to `/sign-in` (middl
 
 The CLI is already installed as a devDependency. All commands assume you're at the repo root.
 
+> **Always use the `npm run db:*` wrappers, never raw `supabase db push` / `supabase link` / `supabase migration list`.** This repo keeps Supabase artefacts under `data/supabase/` (see [`data/supabase/config.toml`](../data/supabase/config.toml)), and the raw CLI looks for `supabase/` in your current directory by default. Symptom of forgetting: `Cannot find project ref. Have you run supabase link?` — even though the project is already linked. The npm scripts in [`package.json`](../package.json) inject `--workdir data` for you.
+
 ### One-time setup
 
 1. **Authenticate:**
