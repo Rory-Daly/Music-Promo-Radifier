@@ -1,4 +1,8 @@
 import 'server-only'
+import {
+  forceRefreshPostPulseAccessToken,
+  getPostPulseAccessToken,
+} from './tokens'
 import type { PostPulsePlatformSettings } from './platform-map'
 
 const BASE_URL = 'https://api.post-pulse.com'
@@ -14,23 +18,47 @@ export class PostPulseError extends Error {
   }
 }
 
-function readApiKey(): string {
-  const key = process.env.POST_PULSE_API_KEY
-  if (!key) {
-    throw new Error('POST_PULSE_API_KEY is not set — see docs/post-pulse.md')
+export class PostPulseNotConnectedError extends PostPulseError {
+  constructor() {
+    super(
+      'Post-Pulse is not connected. Visit /settings and click "Connect Post-Pulse" to authorise.',
+      412,
+      null,
+    )
+    this.name = 'PostPulseNotConnectedError'
   }
-  return key
 }
 
-async function ppFetch(path: string, init: RequestInit): Promise<unknown> {
-  const res = await fetch(`${BASE_URL}${path}`, {
+async function doFetch(path: string, init: RequestInit, accessToken: string): Promise<Response> {
+  return fetch(`${BASE_URL}${path}`, {
     ...init,
     headers: {
-      Authorization: `Bearer ${readApiKey()}`,
+      Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
       ...(init.headers ?? {}),
     },
   })
+}
+
+/**
+ * Calls the Post-Pulse REST API with a refreshed access token, retrying
+ * once on 401 in case the stored token was revoked or rotated by
+ * another caller. Throws PostPulseNotConnectedError when the workspace
+ * hasn't been connected yet, so callers can surface a clear "connect
+ * first" message rather than a generic 401.
+ */
+async function ppFetch(path: string, init: RequestInit): Promise<unknown> {
+  let accessToken = await getPostPulseAccessToken()
+  if (!accessToken) throw new PostPulseNotConnectedError()
+
+  let res = await doFetch(path, init, accessToken)
+  if (res.status === 401) {
+    const refreshed = await forceRefreshPostPulseAccessToken()
+    if (!refreshed) throw new PostPulseNotConnectedError()
+    accessToken = refreshed
+    res = await doFetch(path, init, accessToken)
+  }
+
   const text = await res.text()
   let body: unknown = null
   if (text) {

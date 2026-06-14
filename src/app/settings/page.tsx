@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { listSocialConnectionsForArtist } from '@/lib/post-pulse/connections'
+import { readPostPulseOAuthClientFromEnv } from '@/lib/post-pulse/oauth'
+import { isPostPulseConnected } from '@/lib/post-pulse/tokens'
 import { getCurrentUserAndArtists } from '@/lib/supabase/queries'
 import { SettingsClient } from './SettingsClient'
 
@@ -18,7 +20,8 @@ export default async function SettingsPage() {
   }
 
   const connections = await listSocialConnectionsForArtist(activeMembership.artist_id)
-  const apiKeyConfigured = Boolean(process.env.POST_PULSE_API_KEY)
+  const oauthClientConfigured = Boolean(readPostPulseOAuthClientFromEnv())
+  const postPulseConnected = oauthClientConfigured && (await isPostPulseConnected())
 
   return (
     <main className="min-h-screen bg-brand-bg px-8 py-10 text-brand-fg">
@@ -49,7 +52,8 @@ export default async function SettingsPage() {
         <SettingsClient
           artistId={activeMembership.artist_id}
           initialConnections={connections}
-          apiKeyConfigured={apiKeyConfigured}
+          oauthClientConfigured={oauthClientConfigured}
+          postPulseConnected={postPulseConnected}
         />
       </div>
     </main>

@@ -1,7 +1,12 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { z } from 'zod'
 import { getYouTubeAccessToken } from '@/lib/oauth/youtube-tokens'
-import { createPost, importMediaByUrl, PostPulseError } from '@/lib/post-pulse/client'
+import {
+  createPost,
+  importMediaByUrl,
+  PostPulseError,
+  PostPulseNotConnectedError,
+} from '@/lib/post-pulse/client'
 import { getSocialConnection } from '@/lib/post-pulse/connections'
 import {
   type AppPlatform,
@@ -196,6 +201,9 @@ async function publishViaPostPulse({ post }: { post: PostJoinRow }) {
     const imported = await importMediaByUrl(post.renders.output_url)
     mediaPath = imported.path
   } catch (e) {
+    if (e instanceof PostPulseNotConnectedError) {
+      return err(e.message, 412, 'post_pulse_not_connected')
+    }
     const message = e instanceof Error ? e.message : 'Unknown media import error'
     await markPostFailed(post.id, message)
     return err(message, 502, 'media_import_failed')
@@ -219,6 +227,9 @@ async function publishViaPostPulse({ post }: { post: PostJoinRow }) {
       scheduledTime,
     })
   } catch (e) {
+    if (e instanceof PostPulseNotConnectedError) {
+      return err(e.message, 412, 'post_pulse_not_connected')
+    }
     const message =
       e instanceof PostPulseError
         ? e.message

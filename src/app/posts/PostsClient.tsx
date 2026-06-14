@@ -39,6 +39,7 @@ export function PostsClient({ initialPosts, artistId, youtubeConnected }: Props)
   const [banner, setBanner] = useState<
     | { kind: 'success'; message: string }
     | { kind: 'error'; message: string }
+    | { kind: 'reconnect'; message: string; href: string; cta: string }
     | null
   >(null)
 
@@ -125,16 +126,40 @@ export function PostsClient({ initialPosts, artistId, youtubeConnected }: Props)
   }
 
   async function publish(post: PostRow) {
-    await call(
-      `/api/posts/${post.id}/publish`,
-      {
+    setBusy(post.id)
+    setBanner(null)
+    try {
+      const res = await fetch(`/api/posts/${post.id}/publish`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({}),
-      },
-      'Published',
-      post.id,
-    )
+      })
+      const body = (await res.json().catch(() => null)) as
+        | { error?: string; code?: string }
+        | null
+      if (!res.ok) {
+        if (body?.code === 'post_pulse_not_connected') {
+          setBanner({
+            kind: 'reconnect',
+            message: 'Post-Pulse is not connected. Reconnect to publish to IG / TikTok / X / Threads / Facebook.',
+            href: '/settings',
+            cta: 'Reconnect Post-Pulse →',
+          })
+        } else {
+          setBanner({
+            kind: 'error',
+            message: body?.error ?? `Publish failed (${res.status})`,
+          })
+        }
+        return
+      }
+      setBanner({ kind: 'success', message: 'Published' })
+      startTransition(() => router.refresh())
+    } catch (e) {
+      setBanner({ kind: 'error', message: e instanceof Error ? e.message : 'Publish failed' })
+    } finally {
+      setBusy(null)
+    }
   }
 
   async function disconnectYouTube() {
@@ -193,16 +218,34 @@ export function PostsClient({ initialPosts, artistId, youtubeConnected }: Props)
       {connectionBanner}
 
       {banner ? (
-        <p
+        <div
           className={cn(
-            'rounded-md border px-3 py-2 text-sm',
+            'flex flex-wrap items-center justify-between gap-3 rounded-md border px-3 py-2 text-sm',
             banner.kind === 'success'
               ? 'border-brand-rule bg-brand-bg-2 text-brand-fg'
               : 'border-brand-accent-2 bg-brand-bg-2 text-brand-fg',
           )}
         >
-          {banner.message}
-        </p>
+          <p className="min-w-0">{banner.message}</p>
+          <div className="flex shrink-0 items-center gap-2">
+            {banner.kind === 'reconnect' ? (
+              <a
+                href={banner.href}
+                className="rounded-md border border-brand-accent bg-brand-accent/15 px-3 py-1 text-xs font-medium text-brand-fg transition hover:bg-brand-accent/25"
+              >
+                {banner.cta}
+              </a>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setBanner(null)}
+              className="rounded-md border border-brand-rule px-2 py-1 text-xs font-medium text-brand-fg-dim transition hover:text-brand-fg"
+              aria-label="Dismiss"
+            >
+              ×
+            </button>
+          </div>
+        </div>
       ) : null}
 
       {STATUS_ORDER.map((status) => {

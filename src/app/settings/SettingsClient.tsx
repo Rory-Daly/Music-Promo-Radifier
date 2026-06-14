@@ -1,6 +1,6 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, useTransition } from 'react'
 import type { AppPlatform } from '@/lib/post-pulse/platform-map'
 import type { SocialConnectionRow } from '@/lib/post-pulse/connections'
@@ -28,19 +28,57 @@ const ORDER: Exclude<AppPlatform, 'yt_short'>[] = [
 type Props = {
   artistId: string
   initialConnections: SocialConnectionRow[]
-  apiKeyConfigured: boolean
+  oauthClientConfigured: boolean
+  postPulseConnected: boolean
 }
 
-export function SettingsClient({ artistId, initialConnections, apiKeyConfigured }: Props) {
+export function SettingsClient({
+  artistId,
+  initialConnections,
+  oauthClientConfigured,
+  postPulseConnected,
+}: Props) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [, startTransition] = useTransition()
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState<Exclude<AppPlatform, 'yt_short'> | null>(null)
   const [accountIdInput, setAccountIdInput] = useState('')
   const [handleInput, setHandleInput] = useState('')
+  const [transientBanner, setTransientBanner] = useState<
+    { kind: 'success' | 'error'; message: string } | null
+  >(null)
+
+  const urlStatus = searchParams.get('post_pulse')
+  const urlMessage = searchParams.get('msg')
+  const urlBanner: { kind: 'success' | 'error'; message: string } | null =
+    urlStatus === 'success'
+      ? { kind: 'success', message: 'Post-Pulse connected.' }
+      : urlStatus === 'error'
+        ? { kind: 'error', message: urlMessage ?? 'Connection failed.' }
+        : null
+  const oauthBanner = transientBanner ?? urlBanner
 
   const byPlatform = new Map(initialConnections.map((c) => [c.platform, c]))
+
+  async function disconnectPostPulse() {
+    setError(null)
+    setBusy('__post_pulse__')
+    try {
+      const res = await fetch('/api/post-pulse/disconnect', { method: 'POST' })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error ?? `HTTP ${res.status}`)
+      }
+      setTransientBanner({ kind: 'success', message: 'Post-Pulse disconnected.' })
+      startTransition(() => router.refresh())
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to disconnect Post-Pulse.')
+    } finally {
+      setBusy(null)
+    }
+  }
 
   function reset() {
     setEditing(null)
@@ -104,19 +142,73 @@ export function SettingsClient({ artistId, initialConnections, apiKeyConfigured 
   return (
     <div className="space-y-8">
       <section className="rounded-md border border-brand-rule bg-brand-bg-2 p-5">
-        <h2 className="font-display text-lg tracking-tight">Post-Pulse</h2>
-        <p className="mt-1 text-sm text-brand-fg-dim">
-          Connect each platform to a Post-Pulse social account. Find the numeric account ID
-          inside the Post-Pulse dashboard (Accounts tab). YouTube Shorts publishes via the
-          native YouTube path — connect that on the Posts page.
-        </p>
-        {!apiKeyConfigured && (
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="font-display text-lg tracking-tight">Post-Pulse</h2>
+            <p className="mt-1 text-sm text-brand-fg-dim">
+              Connect each platform to a Post-Pulse social account. Find the numeric
+              account ID inside the Post-Pulse dashboard (Accounts tab). YouTube Shorts
+              publishes via the native YouTube path — connect that on the Posts page.
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {postPulseConnected ? (
+              <button
+                type="button"
+                onClick={disconnectPostPulse}
+                disabled={busy === '__post_pulse__'}
+                className="rounded-md border border-brand-rule px-3 py-1.5 text-xs font-medium text-brand-fg-dim transition hover:border-red-500/50 hover:text-red-300 disabled:opacity-50"
+              >
+                {busy === '__post_pulse__' ? '…' : 'Disconnect Post-Pulse'}
+              </button>
+            ) : (
+              <a
+                href="/api/post-pulse/oauth/start"
+                className={`rounded-md border px-3 py-1.5 text-xs font-medium transition ${
+                  oauthClientConfigured
+                    ? 'border-brand-accent bg-brand-accent/15 text-brand-fg hover:bg-brand-accent/25'
+                    : 'pointer-events-none border-brand-rule text-brand-fg-faint opacity-60'
+                }`}
+                aria-disabled={!oauthClientConfigured}
+              >
+                Connect Post-Pulse
+              </a>
+            )}
+            <a
+              href="https://post-pulse.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-md border border-brand-rule px-3 py-1.5 text-xs font-medium text-brand-fg transition hover:border-brand-accent"
+            >
+              Dashboard ↗
+            </a>
+          </div>
+        </div>
+        {!oauthClientConfigured && (
           <p className="mt-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
-            <code className="font-mono">POST_PULSE_API_KEY</code> is not set on the server.
-            Add it to <code className="font-mono">.env.local</code> and restart the dev
-            server. Connections you save below will still be stored, but publishing will
-            fail until the key is configured. See{' '}
+            <code className="font-mono">POST_PULSE_CLIENT_ID</code> and{' '}
+            <code className="font-mono">POST_PULSE_CLIENT_SECRET</code> are not set on the
+            server. Add them to <code className="font-mono">.env.local</code> and restart
+            the dev server. Connections you save below will still be stored, but
+            publishing will fail until OAuth is configured. See{' '}
             <code className="font-mono">docs/post-pulse.md</code>.
+          </p>
+        )}
+        {oauthClientConfigured && !postPulseConnected && (
+          <p className="mt-3 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+            Post-Pulse is configured but not connected. Click{' '}
+            <strong>Connect Post-Pulse</strong> above to complete OAuth before publishing.
+          </p>
+        )}
+        {oauthBanner && (
+          <p
+            className={`mt-3 rounded-md border px-3 py-2 text-xs ${
+              oauthBanner.kind === 'success'
+                ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+                : 'border-red-500/40 bg-red-500/10 text-red-300'
+            }`}
+          >
+            {oauthBanner.message}
           </p>
         )}
         {error && (
